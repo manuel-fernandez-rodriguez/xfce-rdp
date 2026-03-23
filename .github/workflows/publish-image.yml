@@ -1,0 +1,54 @@
+name: Publish dev-box image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get git tag for this commit
+        id: get_tag
+        run: |
+          # ensure tags are available
+          git fetch --tags --force
+          tag=$(git tag --points-at $GITHUB_SHA)
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./src
+          file: ./src/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/dev-box:latest
+            ghcr.io/${{ github.repository_owner }}/dev-box:${{ github.sha }}
+
+      - name: Retag and push image for git tag
+        if: steps.get_tag.outputs.tag != ''
+        run: |
+          docker pull ghcr.io/${{ github.repository_owner }}/dev-box:${{ github.sha }}
+          docker tag ghcr.io/${{ github.repository_owner }}/dev-box:${{ github.sha }} ghcr.io/${{ github.repository_owner }}/dev-box:${{ steps.get_tag.outputs.tag }}
+          docker push ghcr.io/${{ github.repository_owner }}/dev-box:${{ steps.get_tag.outputs.tag }}
