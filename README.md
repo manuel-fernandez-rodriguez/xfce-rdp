@@ -1,65 +1,40 @@
-# Description
-Full xfce4 desktop environment with Visual Studio Code, .NET10 SDK, Firefox, and other tools pre-installed. 
-You can connect to it using Remote Desktop Protocol (RDP) on port 33890 (or any other port you choose).
+# dev-box
+<img src="https://img.shields.io/badge/Docker-2CA5E0?logo=docker&logoColor=white" /> <img src="https://img.shields.io/badge/Kubernetes-3069DE?logo=kubernetes&logoColor=white" />
 
-# Build
-```
-docker build -t dev-box .
-```
-# Run
-The examples in this section assume the default username of `developer`.
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/manuel-fernandez-rodriguez/dev-box/publish-image.yml)](https://github.com/manuel-fernandez-rodriguez/dev-box/actions/workflows/publish-image.yml)
+[![GitHub License](https://img.shields.io/github/license/manuel-fernandez-rodriguez/dev-box)](https://github.com/manuel-fernandez-rodriguez/dev-box/blob/main/LICENSE.txt)
+[![Github Package](https://img.shields.io/badge/package-dev--box-latest)](https://github.com/manuel-fernandez-rodriguez/dev-box/pkgs/container/dev-box)
 
-See the section on [Setting the default user's name](#set-user-name) later on for instructions on how to set a different username.
+Full xfce4 desktop environment with:
 
-## Setting the default user's password {#set-user-password}
-Preferred (secure) — provide password as a Docker secret (Swarm):
-```
-echo "s3cr3t" | docker secret create user_password -
-docker service create --name dev-box --secret user_password --publish 33890:3389 dev-box:latest
-```
+- .NET10 SDK
+- Visual Studio Code 
+- c# DevKit
+- Firefox
 
-Single-host (recommended over plain env) — bind-mount a read-only file into /run/secrets:
-```
-echo "s3cr3t" > user_password
-docker run -v "$(pwd)/user_password:/run/secrets/user_password:ro" \
-  -p 33890:3389 --shm-size=1g  -d --name dev-box dev-box:latest
-```
+The environment is accessible via Remote Desktop Protocol (RDP) on any other port you choose.
 
-Less secure — provide password via an environment variable (visible in inspect):
-```
+## Run on Docker
+This will run the container with the default username `developer` and the password `s3cr3t`. 
+The RDP port will be forwarded to 33890 on the host, and a 1GB of shared memory` will be allocated 
+to be able to run Firefox and VS Code.
+
+```bash
 docker run -e USER_PASSWORD='s3cr3t' -p 33890:3389 \
-  --shm-size=1g -d --name dev-box dev-box:latest
+  --shm-size=1g -d --name dev-box ghcr.io/manuel-fernandez-rodriguez/dev-box:latest
 ```
-Notes:
-- Prefer Docker secrets or a read-only file mount to avoid leaking credentials.
+See [docker.md](docker.md) for more detailed instructions.
 
-## Setting the default user's name {#set-user-name}
-If not specified the username will default to `developer`. To specify a different username, 
-set the USER_NAME environment variable. The entrypoint will create a user with that name 
-and the specified password (always required, see the [preceding section](#set-user-password).
-```
-docker run -e USER_NAME=debian -e USER_PASSWORD='s3cr3t' -p 33890:3389 \
-  --shm-size=1g -d --name dev-box dev-box:latest
-```
+## Run on Kubernetes
+This will run the container with the default username `developer` and the password `s3cr3t`. 
+The RDP port will be forwarded to 33890 on the host, and a 1GB of shared memory` will be allocated 
+to be able to run Firefox and VS Code.
 
-
-## Persisting home directory
+```bash
+kubectl run dev-box \
+  --image=ghcr.io/manuel-fernandez-rodriguez/dev-box:latest \
+  --restart=Never --port=3389 --image-pull-policy=IfNotPresent \
+  --env="USER_PASSWORD=s3cr3t" \
+  --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"dev-box","volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}]}}'
 ```
-# Create a named volume and mount it at /home so user homes persist across
-# container restarts. The entrypoint will only chown the volume if ownership
-# doesn't match the created user's UID.
-docker volume create devbox-home
-docker run -v devbox-home:/home -v "$(pwd)/user_password:/run/secrets/user_password:ro" \
-  -e USER_NAME=debian -p 33890:3389 --shm-size=1g -d --name dev-box dev-box:latest
-```
-
-or, using an environment variable for the password, and the default username:
-```
-docker volume create devbox-home
-docker run -v devbox-home:/home -e USER_PASSWORD='s3cr3t' \
-  -p 33890:3389 --shm-size=1g -d --name dev-box dev-box:latest
-```
-Note that, even if not mounting a volume, the volume will still be created as an unnamed volume.
-c# DevKit extension can take a fair amount of space (500MB+), so once the container has been created once,
-the volume can be found with `docker volume ls` and removed with `docker volume rm <volume_name>` if you want to save space.
-
+See [kubernetes.md](kubernetes.md) for more detailed instructions.
