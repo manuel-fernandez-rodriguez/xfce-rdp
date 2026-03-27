@@ -36,7 +36,10 @@ RUN apt-get update && \
         librsvg2-common \
         adwaita-icon-theme \
         at-spi2-core \
-        pm-utils 
+        pm-utils \
+    && apt-get autoremove -y --purge \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
 
 # User creation is deferred to container startup so the runtime can select
 # a username without making the image incoherent. The entrypoint will create
@@ -48,7 +51,9 @@ RUN wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor 
     sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main" > /etc/apt/sources.list.d/vscode.list' && \
     apt-get update && \
     apt-get install -y --no-install-recommends code && \
-    rm -rf /var/lib/apt/lists/* microsoft.gpg
+    apt-get autoremove -y --purge && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* microsoft.gpg /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
 
 # Make sure any chrome-sandbox helper installed with VS Code is owned by
 # root and has the setuid bit so Chromium/Electron sandbox helpers can
@@ -92,7 +97,10 @@ RUN wget https://packages.microsoft.com/config/debian/13/packages-microsoft-prod
     dpkg -i packages-microsoft-prod.deb && \
     rm packages-microsoft-prod.deb && \
     apt-get update && \
-    apt-get install -y dotnet-sdk-10.0
+    apt-get install -y dotnet-sdk-10.0 && \
+    apt-get autoremove -y --purge && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
 
 ENV DOTNET_ROOT=/usr/share/dotnet
 ENV PATH="$PATH:/usr/share/dotnet"
