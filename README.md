@@ -12,7 +12,7 @@ Full xfce4 desktop environment with:
 - c# DevKit
 - Firefox
 
-The environment is accessible via Remote Desktop Protocol (RDP) on any other port you choose.
+The environment is accessible via Remote Desktop Protocol (RDP) on any port you choose.
 
 ## Run on Docker
 This will run the container with the default username `developer` and the password `s3cr3t`. 
