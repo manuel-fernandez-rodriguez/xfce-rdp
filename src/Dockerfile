@@ -25,8 +25,10 @@ RUN apt-get update && \
         xserver-xorg-core \
         xorgxrdp \
         git \
+        jq \
         firefox-esr \
         wget \
+        curl \
         gnupg \
         ca-certificates \
         apt-transport-https \
@@ -40,10 +42,6 @@ RUN apt-get update && \
     && apt-get autoremove -y --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
-
-# User creation is deferred to container startup so the runtime can select
-# a username without making the image incoherent. The entrypoint will create
-# the requested user if it does not already exist and configure sudo.
 
 # Install Visual Studio Code
 RUN wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg && \
@@ -71,13 +69,19 @@ RUN for f in /usr/share/code/chrome-sandbox /usr/lib/code/chrome-sandbox /opt/vi
 # are available to any user created at runtime).
 ENV DONT_PROMPT_WSL_INSTALL=1
 
+# Make sure VS Code can find the .NET SDK by configuring the extension's settings to point to the system-wide dotnet path.
+# The settings are copied to /etc/skel so they are present in any new user's home directory at runtime.
+RUN mkdir -p /tmp/.vscode-root/User && \
+    printf '{ "dotnetAcquisitionExtension.existingDotnetPath": [ { "extensionId": "ms-dotnettools.csdevkit", "path": "/usr/share/dotnet/dotnet" }, { "extensionId": "ms-dotnettools.csharp", "path": "/usr/share/dotnet/dotnet" } ] }' > /tmp/.vscode-root/User/settings.json && \
+    mkdir -p /etc/skel/.config/Code/User && \
+    cp /tmp/.vscode-root/User/settings.json /etc/skel/.config/Code/User/settings.json
+
 # Install extensions into a global extensions directory so they are available
 # to any user created at runtime. Running the `code` CLI as root requires
 # a user-data-dir and --no-sandbox; install into `/usr/share/code/extensions`.
 RUN mkdir -p /usr/share/code/extensions && \
     chown root:root /usr/share/code/extensions && \
-    code --extensions-dir /usr/share/code/extensions --user-data-dir /tmp/.vscode-root --no-sandbox --install-extension ms-dotnettools.csdevkit --force && \
-    code --extensions-dir /usr/share/code/extensions --user-data-dir /tmp/.vscode-root --no-sandbox --install-extension github.copilot-chat --force || true
+    code --extensions-dir /usr/share/code/extensions --user-data-dir /tmp/.vscode-root --no-sandbox --install-extension ms-dotnettools.csdevkit --force
 
 # Create wrapper for VS Code to disable Chromium sandbox inside container
 RUN printf '#!/bin/sh\nexec /usr/bin/code --no-sandbox --disable-gpu "$@"\n' > /usr/local/bin/code && \
@@ -115,7 +119,8 @@ RUN chmod +x /etc/xrdp/startwm.sh
 
 # Copy entrypoint which will apply a runtime password from a Docker secret or environment
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY entrypoint_helpers.sh /usr/local/bin/entrypoint_helpers.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh && chmod 644 /usr/local/bin/entrypoint_helpers.sh || true
 
 # Allow consumers to persist user home directories by mounting a volume at /home.
 # This lets user homes survive container recreation; ownership is adjusted at
