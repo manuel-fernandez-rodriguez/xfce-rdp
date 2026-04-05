@@ -7,8 +7,11 @@ fi
 
 unset DBUS_SESSION_BUS_ADDRESS
 
-# Use a per-user runtime dir under /tmp so non-root sessions can create it
-XDG_RUNTIME_DIR=/tmp/xdg-runtime-$(id -u)
+# Use a per-session runtime dir under /tmp so concurrent sessions (even
+# for the same UID) do not conflict. Sanitize DISPLAY into an alphanumeric
+# token so it can be used in a directory name.
+DISP_SAFE=$(printf '%s' "${DISPLAY:-}" | tr -c '[:alnum:]' '_')
+XDG_RUNTIME_DIR="/tmp/xdg-runtime-$(id -u)${DISP_SAFE:+-}$DISP_SAFE"
 mkdir -p "$XDG_RUNTIME_DIR"
 mkdir -p "$XDG_RUNTIME_DIR/pulse"
 chmod 0700 "$XDG_RUNTIME_DIR"
@@ -46,16 +49,16 @@ if command -v pipewire >/dev/null 2>&1; then
   pkill -u "$(id -un)" pipewire-pulse 2>/dev/null || true
 
   # start pipewire user service first and wait for its socket
-  pipewire --verbose 2>/tmp/pipewire.log &
+  pipewire --verbose 2>"$XDG_RUNTIME_DIR/pipewire.log" &
   PW_PID=$!
   for i in $(seq 1 100); do
     [ -S "$XDG_RUNTIME_DIR/pipewire-0" ] && break || sleep 0.1
   done
 
   # start wireplumber and pipewire-pulse after pipewire is up
-  wireplumber 2>/tmp/wireplumber.log &
+  wireplumber 2>"$XDG_RUNTIME_DIR/wireplumber.log" &
   WP_PID=$!
-  pipewire-pulse 2>/tmp/pipewire-pulse.log &
+  pipewire-pulse 2>"$XDG_RUNTIME_DIR/pipewire-pulse.log" &
   PWP_PID=$!
 
   # wait for the PulseAudio-compatible socket created by pipewire-pulse
@@ -110,6 +113,34 @@ cleanup()
 }
 
 trap cleanup EXIT HUP TERM INT
+
+
+# If user wants a single-app session, run it instead of starting XFCE.
+if [ -x "$HOME/.xsession" ]; then
+  echo "[startwm] Starting single-app session from $HOME/.xsession" >&2
+  # export existing DISPLAY/XAUTHORITY if present (do not hardcode)
+  [ -n "${DISPLAY:-}" ] && export DISPLAY
+  [ -n "${XAUTHORITY:-}" ] && export XAUTHORITY
+  # wait briefly for X authority to be created if provided
+  if [ -n "${XAUTHORITY:-}" ]; then
+    for i in $(seq 1 50); do
+      [ -r "$XAUTHORITY" ] && break || sleep 0.1
+    done
+  fi
+  /bin/bash -l "$HOME/.xsession"
+  exit $?
+elif [ -n "${SINGLE_APP:-}" ]; then
+  echo "[startwm] Starting SINGLE_APP: $SINGLE_APP" >&2
+  [ -n "${DISPLAY:-}" ] && export DISPLAY
+  [ -n "${XAUTHORITY:-}" ] && export XAUTHORITY
+  if [ -n "${XAUTHORITY:-}" ]; then
+    for i in $(seq 1 50); do
+      [ -r "$XAUTHORITY" ] && break || sleep 0.1
+    done
+  fi
+  /bin/bash -lc "$SINGLE_APP"
+  exit $?
+fi
 
 # Start the desktop session and wait; when it exits the script will run cleanup
 startxfce4 &

@@ -1,6 +1,6 @@
 # Run this image as a Kubernetes Pod
 
-This is a short, practical guide to run the `dev-box` image as a Kubernetes 
+This is a short, practical guide to run the `xfce-rdp` image as a Kubernetes 
 Pod, keeping secrets out of plain env-vars in production.
 
 ## Setting up users and passwords
@@ -23,34 +23,34 @@ the manifest, but it can be useful for a quick test or demo.
 - Run via `kubectl run` with an env var (insecure):
 
 ```bash
-kubectl run dev-box \
-  --image=ghcr.io/manuel-fernandez-rodriguez/dev-box:latest \
+kubectl run xfce-rdp \
+  --image=ghcr.io/manuel-fernandez-rodriguez/xfce-rdp:latest \
   --restart=Never --port=3389 --image-pull-policy=IfNotPresent \
   --env="USERS_CREDENTIALS=[{\"username\":\"developer\",\"password\":\"s3cr3t\",\"sudo\":true}]"
 ```
 
 - Forward the RDP port:
-  `kubectl port-forward pod/dev-box 33890:3389`
+  `kubectl port-forward pod/xfce-rdp 33890:3389`
 
 You can add a memory-backed `/dev/shm` for a quick test using `kubectl run --overrides` 
 to modify the Pod spec inline. Example (bash):
 
 ```bash
-kubectl run dev-box \
-  --image=ghcr.io/manuel-fernandez-rodriguez/dev-box:latest \
+kubectl run xfce-rdp \
+  --image=ghcr.io/manuel-fernandez-rodriguez/xfce-rdp:latest \
   --restart=Never --port=3389 --image-pull-policy=IfNotPresent \
   --env="USERS_CREDENTIALS=[{\"username\":\"developer\",\"password\":\"s3cr3t\",\"sudo\":true}]" \
-  --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"dev-box","volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}]}}'
+  --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"xfce-rdp","volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}]}}'
 ```
 
 PowerShell (use single quotes around the JSON payload):
 
 ```powershell
-kubectl run dev-box `
-  --image=ghcr.io/manuel-fernandez-rodriguez/dev-box:latest `
+kubectl run xfce-rdp `
+  --image=ghcr.io/manuel-fernandez-rodriguez/xfce-rdp:latest `
   --restart=Never --port=3389 --image-pull-policy=IfNotPresent `
   --env='USERS_CREDENTIALS=[{"username":"developer","password":"s3cr3t","sudo":true}]' `
-  --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"dev-box","volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}]}}'
+  --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"xfce-rdp","volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}]}}'
 ```
 
 Note: `--overrides` is handy for quick testing, but using a Pod manifest (as 
@@ -63,17 +63,17 @@ may be ignored on older Kubernetes versions — test on your cluster.
    kubectl create secret generic users-credentials --from-file=users_credentials=./users.json
    ```
 
-2. Pod manifest (save as `dev-box-pod.yaml`):
+2. Pod manifest (save as `xfce-rdp-pod.yaml`):
 
 ```yaml
 apiVersion: v1
 kind: Pod
 metadata:
-  name: dev-box
+  name: xfce-rdp
 spec:
   containers:
-  - name: dev-box
-    image: ghcr.io/manuel-fernandez-rodriguez/dev-box:latest
+  - name: xfce-rdp
+    image: ghcr.io/manuel-fernandez-rodriguez/xfce-rdp:latest
     imagePullPolicy: IfNotPresent
     ports:
     - containerPort: 3389
@@ -108,21 +108,21 @@ Also monitor node memory usage and pick a size that leaves safe headroom for
 other pods.
 
 3. Apply and forward:
-  `kubectl apply -f dev-box-pod.yaml`
-  `kubectl port-forward pod/dev-box 33890:3389`
+  `kubectl apply -f xfce-rdp-pod.yaml`
+  `kubectl port-forward pod/xfce-rdp 33890:3389`
 
 
-## Optional: expose externally via a NodePort Service (save as `dev-box-svc.yaml`):
+## Optional: expose externally via a NodePort Service (save as `xfce-rdp-svc.yaml`):
 
 ```yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: dev-box-svc
+  name: xfce-rdp-svc
 spec:
   type: NodePort
   selector:
-    run: dev-box
+    run: xfce-rdp
   ports:
   - port: 3389
     targetPort: 3389
@@ -146,10 +146,10 @@ Follow these steps to push the image to Google Container Registry (replace
 1. Build and push image to GCR
 
 ```bash
-docker build -t dev-box:latest -f src/Dockerfile .
-docker tag dev-box:latest gcr.io/PROJECT_ID/dev-box:latest
+docker build -t xfce-rdp:latest -f src/Dockerfile .
+docker tag xfce-rdp:latest gcr.io/PROJECT_ID/xfce-rdp:latest
 gcloud auth configure-docker
-docker push gcr.io/PROJECT_ID/dev-box:latest
+docker push gcr.io/PROJECT_ID/xfce-rdp:latest
 ```
 
 2. Manifests
@@ -197,20 +197,20 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dev-box
+  name: xfce-rdp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: dev-box
+      app: xfce-rdp
   template:
     metadata:
       labels:
-        app: dev-box
+        app: xfce-rdp
     spec:
       containers:
-      - name: dev-box
-        image: ghcr.io/manuel-fernandez-rodriguez/dev-box:latest
+      - name: xfce-rdp
+        image: ghcr.io/manuel-fernandez-rodriguez/xfce-rdp:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3389
@@ -245,11 +245,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: dev-box-lb
+  name: xfce-rdp-lb
 spec:
   type: LoadBalancer
   selector:
-    app: dev-box
+    app: xfce-rdp
   ports:
   - protocol: TCP
     port: 3389
@@ -268,7 +268,7 @@ kubectl apply -f service.yaml
 4. Get external IP of the LoadBalancer
 
 ```bash
-kubectl get svc dev-box-lb --watch
+kubectl get svc xfce-rdp-lb --watch
 ```
 
 Notes
