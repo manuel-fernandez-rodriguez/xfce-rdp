@@ -105,9 +105,16 @@ RUN if [ -f /etc/pam.d/xrdp-sesman ]; then \
       fi; \
     fi
 
-# Remove root password
-RUN passwd -d root
-
+# Lock root and disallow graphical xrdp logins for root:
+#  - `passwd -l root` locks the account password (safer than removing it)
+#  - change root shell to nologin to prevent interactive sessions
+#  - insert a PAM rule into xrdp-sesman that explicitly rejects user root
+RUN passwd -l root || true && \
+    usermod -s /usr/sbin/nologin root || true && \
+    if [ -f /etc/pam.d/xrdp-sesman ] && ! grep -q 'pam_succeed_if.so user != root' /etc/pam.d/xrdp-sesman; then \
+      # insert near top to reject root before session setup
+      sed -i '1i auth    required    pam_succeed_if.so user != root quiet' /etc/pam.d/xrdp-sesman || true; \
+    fi
 
 # Expose XRDP port
 EXPOSE 3389
