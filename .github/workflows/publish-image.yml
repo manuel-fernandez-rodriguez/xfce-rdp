@@ -9,6 +9,10 @@ on:
         description: 'Optional space-separated image tags to attach (e.g. "v1.2.3 stable")'
         required: false
         default: ''
+      image_name:
+        description: 'Name of the image to publish (default: dev-box)'
+        required: false
+        default: 'dev-box'
 
 permissions:
   contents: read
@@ -17,6 +21,8 @@ permissions:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: ${{ github.event.inputs.image_name || 'dev-box' }}
 
     steps:
       - name: Checkout repository
@@ -43,16 +49,16 @@ jobs:
 
           # Include 'latest' when running on main branch or when this is a release
           if [ "${GITHUB_REF#refs/heads/}" = "main" ] || [ "$GITHUB_EVENT_NAME" = "release" ]; then
-            TAGS="ghcr.io/${{ github.repository_owner }}/dev-box:latest"
+            TAGS="ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:latest"
           fi
 
           # Always include the commit SHA tag
-          TAGS="$TAGS"$'\n'"ghcr.io/${{ github.repository_owner }}/dev-box:${{ github.sha }}"
+          TAGS="$TAGS"$'\n'"ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:${{ github.sha }}"
 
           # If chosen tags exist, include each one (space-separated list)
           if [ -n "$chosen_list" ]; then
             for t in $chosen_list; do
-              TAGS="$TAGS"$'\n'"ghcr.io/${{ github.repository_owner }}/dev-box:${t}"
+              TAGS="$TAGS"$'\n'"ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:${t}"
             done
           fi
 
