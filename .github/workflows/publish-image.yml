@@ -15,7 +15,7 @@ on:
         default: 'xfce-rdp'
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
