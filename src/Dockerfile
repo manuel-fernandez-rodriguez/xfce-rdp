@@ -2,7 +2,8 @@ FROM debian:trixie-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install dependencies
+# Install mimimum dependencies for a functional XFCE desktop environment with 
+# XRDP support, plus some common utilities and tools.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         sudo \
@@ -24,11 +25,7 @@ RUN apt-get update && \
         libsecret-1-0 \
         xserver-xorg-core \
         xorgxrdp \
-        git \
         jq \
-        firefox-esr \
-        wget \
-        curl \
         gnupg \
         ca-certificates \
         apt-transport-https \
@@ -36,80 +33,17 @@ RUN apt-get update && \
         gvfs-backends \
         tumbler \
         librsvg2-common \
-        adwaita-icon-theme \
         at-spi2-core \
         pm-utils \
+        wmctrl \
     && apt-get autoremove -y --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
 
-# Install Visual Studio Code
-RUN wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg && \
-    install -o root -g root -m 644 microsoft.gpg /etc/apt/trusted.gpg.d/ && \
-    sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main" > /etc/apt/sources.list.d/vscode.list' && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends code && \
-    apt-get autoremove -y --purge && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* microsoft.gpg /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
+# Unset, so that it is not propagated to the container at runtime
+ENV DEBIAN_FRONTEND=
 
-# Make sure any chrome-sandbox helper installed with VS Code is owned by
-# root and has the setuid bit so Chromium/Electron sandbox helpers can
-# create namespaces inside Docker's default seccomp profile.
-RUN for f in /usr/share/code/chrome-sandbox /usr/lib/code/chrome-sandbox /opt/visual-studio-code/chrome-sandbox; do \
-      if [ -f "$f" ]; then \
-        chown root:root "$f" || true; \
-        chmod a+x "$f" || true; \
-        chmod 4755 "$f" || true; \
-      fi; \
-    done || true
-
-
-# Install c# extensions for Visual Studio Code (installed as root so they
-# are available to any user created at runtime).
-ENV DONT_PROMPT_WSL_INSTALL=1
-
-# Make sure VS Code can find the .NET SDK by configuring the extension's settings to point to the system-wide dotnet path.
-# The settings are copied to /etc/skel so they are present in any new user's home directory at runtime.
-RUN mkdir -p /tmp/.vscode-root/User && \
-    printf '{ "dotnetAcquisitionExtension.existingDotnetPath": [ { "extensionId": "ms-dotnettools.csdevkit", "path": "/usr/share/dotnet/dotnet" }, { "extensionId": "ms-dotnettools.csharp", "path": "/usr/share/dotnet/dotnet" } ] }' > /tmp/.vscode-root/User/settings.json && \
-    mkdir -p /etc/skel/.config/Code/User && \
-    cp /tmp/.vscode-root/User/settings.json /etc/skel/.config/Code/User/settings.json
-
-# Install extensions into a global extensions directory so they are available
-# to any user created at runtime. Running the `code` CLI as root requires
-# a user-data-dir and --no-sandbox; install into `/usr/share/code/extensions`.
-RUN mkdir -p /usr/share/code/extensions && \
-    chown root:root /usr/share/code/extensions && \
-    code --extensions-dir /usr/share/code/extensions --user-data-dir /tmp/.vscode-root --no-sandbox --install-extension ms-dotnettools.csdevkit --force
-
-# Create wrapper for VS Code to disable Chromium sandbox inside container
-RUN printf '#!/bin/sh\nexec /usr/bin/code --no-sandbox --disable-gpu "$@"\n' > /usr/local/bin/code && \
-    chmod +x /usr/local/bin/code
-
-# Ensure ELECTRON_DISABLE_SANDBOX is exported system-wide so desktop sessions
-# inherit it, and place a wrapper in /usr/bin to reliably override packaged
-# launcher when applications start VS Code from menus or shortcuts.
-RUN printf 'export ELECTRON_DISABLE_SANDBOX=1\n' > /etc/profile.d/disable-electron-sandbox.sh && \
-    chmod 644 /etc/profile.d/disable-electron-sandbox.sh && \
-    printf '#!/bin/sh\nexec /usr/share/code/code --no-sandbox --disable-gpu "$@"\n' > /usr/bin/code && \
-    chmod +x /usr/bin/code || true
-
-
-# Install .NET 10 SDK via Microsoft's apt repository
-RUN wget https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb -O packages-microsoft-prod.deb && \
-    dpkg -i packages-microsoft-prod.deb && \
-    rm packages-microsoft-prod.deb && \
-    apt-get update && \
-    apt-get install -y dotnet-sdk-10.0 && \
-    apt-get autoremove -y --purge && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
-
-ENV DOTNET_ROOT=/usr/share/dotnet
-ENV PATH="$PATH:/usr/share/dotnet"
-
-
+# Who can run the X server? Allow anybody
 RUN printf 'allowed_users=anybody\n' > /etc/X11/Xwrapper.config && \
     chmod 0444 /etc/X11/Xwrapper.config && \
     chmod +x /usr/share/xsessions/startxfce4 || true
@@ -117,15 +51,11 @@ RUN printf 'allowed_users=anybody\n' > /etc/X11/Xwrapper.config && \
 COPY startwm.sh /etc/xrdp/startwm.sh
 RUN chmod +x /etc/xrdp/startwm.sh
 
-# Copy entrypoint which will apply a runtime password from a Docker secret or environment
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY entrypoint_helpers.sh /usr/local/bin/entrypoint_helpers.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh && chmod 644 /usr/local/bin/entrypoint_helpers.sh || true
-
-# Allow consumers to persist user home directories by mounting a volume at /home.
-# This lets user homes survive container recreation; ownership is adjusted at
-# startup only when necessary by the entrypoint.
-VOLUME ["/home"]
+# Copy entrypoint which will create user at runtime based on environment variables,
+# run any custom entrypoint hooks, and set up the desktop environment
+COPY entrypoint.sh /etc/entrypoint.d/entrypoint.sh
+COPY entrypoint_helpers.sh /etc/entrypoint.d/entrypoint_helpers.sh
+RUN chmod +x /etc/entrypoint.d/entrypoint.sh && chmod 644 /etc/entrypoint.d/entrypoint_helpers.sh || true
 
 # Prefer a 24-bit default depth so X and xrdp negotiate a 24bpp visual.
 RUN mkdir -p /etc/X11/xorg.conf.d && \
@@ -164,4 +94,4 @@ RUN passwd -d root
 # Expose XRDP port
 EXPOSE 3389
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/etc/entrypoint.d/entrypoint.sh"]

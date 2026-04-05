@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Minimal helper to build the dev-box Docker image using the Dockerfile in src/
+# Minimal helper to build the xfce-rdp Docker image using the Dockerfile in src/
 # Usage: ./build.sh [tag]
-# Example: ./build.sh local/youruser/dev-box:latest
+# Example: ./build.sh local/youruser/xfce-rdp:latest
 
-tag="${1:-local/dev-box:latest}"
+tag="${1:-local/xfce-rdp:latest}"
 scriptdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 dockerfile="$scriptdir/src/Dockerfile"

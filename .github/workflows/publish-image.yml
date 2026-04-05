@@ -1,4 +1,4 @@
-name: Publish dev-box image
+name: Publish xfce-rdp image
 
 on:
   release:
@@ -12,7 +12,7 @@ on:
       image_name:
         description: 'Name of the image to publish (default: dev-box)'
         required: false
-        default: 'dev-box'
+        default: 'xfce-rdp'
 
 permissions:
   contents: read
@@ -22,7 +22,7 @@ jobs:
   build-and-publish:
     runs-on: ubuntu-latest
     env:
-      IMAGE_NAME: ${{ github.event.inputs.image_name || 'dev-box' }}
+      IMAGE_NAME: ${{ github.event.inputs.image_name || 'xfce-rdp' }}
 
     steps:
       - name: Checkout repository
