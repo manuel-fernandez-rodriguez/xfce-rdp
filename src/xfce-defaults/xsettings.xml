@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1.0">
+  <!-- System-wide GTK/XSettings defaults (nested structure mirrors per-user files) -->
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Arc-Dark"/>
+    <property name="IconThemeName" type="string" value="Adwaita"/>
+  </property>
+
+  <!-- Ensure menu/button images are enabled and provide a decoration layout -->
+  <property name="Gtk" type="empty">
+    <property name="MenuImages" type="bool" value="true"/>
+    <property name="ButtonImages" type="bool" value="true"/>
+    <property name="DecorationLayout" type="string" value="icon,menu:minimize,maximize,close"/>
+    <property name="FontName" type="string" value="Sans 10"/>
+    <property name="MonospaceFontName" type="string" value="Monospace 10"/>
+  </property>
+</channel>

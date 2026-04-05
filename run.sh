@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./run.sh [--image IMAGE] [--container NAME] [--host-port PORT] [--shm-size SIZE] [--home-bind HOST_PATH]
+# Usage: ./run.sh [--image IMAGE] [--container NAME] [--host-port PORT] [--shm-size SIZE] [--home-bind HOST_PATH] [--force]
 # Defaults: image=local/xfce-rdp:latest, container=xfce-rdp, host_port=33890, shm_size=1g
 # If --home-bind is provided the host path will be mounted at /home. Otherwise a
 # deterministic named docker volume "${container}-home" will be created and mounted
 # at /home so user homes persist across container recreation.
+# --force will remove any existing container with the same name before starting.
 
 # Defaults
 image="local/xfce-rdp:latest"
@@ -15,6 +16,7 @@ shm_size="1g"
 home_bind=""
 home_volume=""
 home_volume_specified=0
+force=0
 
 show_help() {
   cat <<EOF
@@ -25,10 +27,11 @@ Options:
   --container NAME      Container name (default: ${container})
   --host-port PORT      Host port to publish to 3389 (default: ${host_port})
   --shm-size SIZE       Size passed to --shm-size (default: ${shm_size})
-  --home-bind PATH       Host path to bind-mount at /home (optional)
-  --home-volume NAME     Name of the docker volume to mount at /home. If the
-                         option is provided without a NAME it defaults to
-                         "${container}-home". (optional)
+  --home-bind PATH      Host path to bind-mount at /home (optional)
+  --home-volume NAME    Name of the docker volume to mount at /home. If the
+                        option is provided without a NAME it defaults to
+                        "${container}-home". (optional)
+  --force               Remove any existing container with the same name before starting (optional)
   -h, --help            Show this help and exit
 EOF
 }
@@ -48,6 +51,8 @@ while [ "$#" -gt 0 ]; do
     --home-bind) home_bind="$2"; shift 2;;
     --home-volume=*) home_volume="${1#*=}"; shift;;
     --home-volume) home_volume="$2"; home_volume_specified=1; shift 2;;
+    --force=*) force="${1#*=}"; shift;;
+    --force) force=1; shift;;
     -h|--help) show_help; exit 0;;
     *) echo "Unknown option: $1" >&2; show_help; exit 1;;
   esac
@@ -82,6 +87,18 @@ if [ "${home_volume_specified}" -eq 1 ]; then
   fi
   docker volume create "${home_volume}" >/dev/null || true
   docker_args+=( -v "${home_volume}:/home" )
+fi
+
+# If a container with the same name exists, either fail or remove it when --force is used.
+existing_container="$(docker ps -a --filter "name=^/${container}$" --format '{{.Names}}' 2>/dev/null || true)"
+if [ -n "${existing_container}" ]; then
+  if [ "${force}" -ne 0 ]; then
+    echo "Removing existing container '${container}'..."
+    docker rm -f "${container}" >/dev/null 2>&1 || true
+  else
+    echo "Error: container '${container}' already exists. Use --force to remove it before starting." >&2
+    exit 1
+  fi
 fi
 
 docker run "${docker_args[@]}" \
