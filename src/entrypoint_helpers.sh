@@ -188,6 +188,16 @@ APP_CMD="$SINGLEAPP"
 eval "$APP_CMD" &
 APP_PID=$!
 
+# Determine whether to avoid aggressive WM/hint tweaks for apps that use
+# transient dialogs / internal widgets (terminals, terminal emulators, etc).
+# For those, aggressively changing window type / motif hints or marking them
+# as DOCK can break focus restore when a dialog closes.
+CB=$(basename "$SINGLEAPP" | awk '{print tolower($0)}')
+case "$CB" in
+  xfce4-terminal|xterm|gnome-terminal|konsole|lxterminal) SKIP_HINTS=1 ;;
+  *) SKIP_HINTS=0 ;;
+esac
+
 if command -v wmctrl >/dev/null 2>&1; then
   WIN=""
   for i in $(seq 1 80); do
@@ -197,49 +207,45 @@ if command -v wmctrl >/dev/null 2>&1; then
       break
     fi
     # fallback: try matching WM_CLASS using the app command basename
-    CB=$(basename "$SINGLEAPP" | awk '{print tolower($0)}')
-    WIN=$(wmctrl -lx 2>/dev/null | awk -v cb="$CB" '{ if (index(tolower($3), cb)) {print $1; exit}}') || true
+    CB_FALLBACK=$(basename "$SINGLEAPP" | awk '{print tolower($0)}')
+    WIN=$(wmctrl -lx 2>/dev/null | awk -v cb="$CB_FALLBACK" '{ if (index(tolower($3), cb)) {print $1; exit}}') || true
     [ -n "$WIN" ] && break || sleep 0.1
   done
   if [ -n "$WIN" ]; then
     # try fullscreen first (removes decorations in many WMs), fall back to maximized
     wmctrl -ir "$WIN" -b add,fullscreen >/dev/null 2>&1 || wmctrl -ir "$WIN" -b add,maximized_vert,maximized_horz >/dev/null 2>&1 || true
 
-    # Try to restrict allowed actions to only 'close' so window manager
-    # shouldn't show minimize/maximize buttons. Also try to set Motif
-    # hints to remove decorations. Best-effort; many WMs may ignore
-    # these properties.
-    if command -v xprop >/dev/null 2>&1; then
+    # Only apply the more aggressive decoration/state tweaks for non-terminal apps.
+    if [ "${SKIP_HINTS:-0}" -eq 0 ] && command -v xprop >/dev/null 2>&1; then
       xprop -id "$WIN" -f _NET_WM_ALLOWED_ACTIONS 32a -set _NET_WM_ALLOWED_ACTIONS _NET_WM_ACTION_CLOSE >/dev/null 2>&1 || true
       # Motif WM hints: flags=2 (decorations field valid), functions=0, decorations=0
       xprop -id "$WIN" -f _MOTIF_WM_HINTS 32c -set _MOTIF_WM_HINTS "0x2, 0x0, 0x0, 0x0, 0x0" >/dev/null 2>&1 || true
-
-      # WM-specific tweaks: detect WM and apply per-WM best-effort rules.
-      WM_NAME=$(wmctrl -m 2>/dev/null | awk -F: '/Name:/ {gsub(/^[ \t]+|[ \t]+$/,"",$2); print $2}' || true)
-      # if openbox, try to add an application rule matching WM_CLASS to
-      # disable decorations and force maximized state (modify rc.xml).
-      if printf '%s' "$WM_NAME" | grep -qi openbox >/dev/null 2>&1; then
-        WC_RAW=$(xprop -id "$WIN" WM_CLASS 2>/dev/null || true)
-        WC=$(printf '%s' "$WC_RAW" | awk -F'"' '{print $4}' || true)
-        if [ -n "$WC" ]; then
-          OPENBOX_RC="$HOME/.config/openbox/rc.xml"
-          mkdir -p "$(dirname "$OPENBOX_RC")" || true
-          if [ -f "$OPENBOX_RC" ]; then
-            cp "$OPENBOX_RC" "$OPENBOX_RC.bak" 2>/dev/null || true
-            if grep -q "</applications>" "$OPENBOX_RC" 2>/dev/null; then
-              awk -v wc="$WC" 'BEGIN{added=0} /<\/applications>/{ if(!added){ print "  <application class=\"" wc "\">\n    <decor>no</decor>\n    <maximized>yes</maximized>\n  </application>"; added=1 } print; next } {print}' "$OPENBOX_RC" > "$OPENBOX_RC.tmp" && mv "$OPENBOX_RC.tmp" "$OPENBOX_RC" || true
-            else
-              awk -v wc="$WC" '/<\/openbox_config>/{ print "<applications>\n  <application class=\"" wc "\">\n    <decor>no</decor>\n    <maximized>yes</maximized>\n  </application>\n</applications>"; print; next } {print}' "$OPENBOX_RC" > "$OPENBOX_RC.tmp" && mv "$OPENBOX_RC.tmp" "$OPENBOX_RC" || true
-            fi
-            command -v openbox >/dev/null 2>&1 && openbox --reconfigure >/dev/null 2>&1 || true
-          fi
-        fi
-      elif printf '%s' "$WM_NAME" | grep -qi xfwm4 >/dev/null 2>&1; then
-        # For xfwm4, attempt to hide taskbar/pager entries for the window.
-        xprop -id "$WIN" -f _NET_WM_STATE 32a -set _NET_WM_STATE _NET_WM_STATE_SKIP_TASKBAR,_NET_WM_STATE_SKIP_PAGER >/dev/null 2>&1 || true
-      fi
     fi
 
+    # WM-specific tweaks: detect WM and apply per-WM best-effort rules.
+    WM_NAME=$(wmctrl -m 2>/dev/null | awk -F: '/Name:/ {gsub(/^[ \t]+|[ \t]+$/,"",$2); print $2}' || true)
+    # if openbox, try to add an application rule matching WM_CLASS to
+    # disable decorations and force maximized state (modify rc.xml).
+    if printf '%s' "$WM_NAME" | grep -qi openbox >/dev/null 2>&1; then
+      WC_RAW=$(xprop -id "$WIN" WM_CLASS 2>/dev/null || true)
+      WC=$(printf '%s' "$WC_RAW" | awk -F'"' '{print $4}' || true)
+      if [ -n "$WC" ] && [ "${SKIP_HINTS:-0}" -eq 0 ]; then
+        OPENBOX_RC="$HOME/.config/openbox/rc.xml"
+        mkdir -p "$(dirname "$OPENBOX_RC")" || true
+        if [ -f "$OPENBOX_RC" ]; then
+          cp "$OPENBOX_RC" "$OPENBOX_RC.bak" 2>/dev/null || true
+          if grep -q "</applications>" "$OPENBOX_RC" 2>/dev/null; then
+            awk -v wc="$WC" 'BEGIN{added=0} /<\/applications>/{ if(!added){ print "  <application class=\"" wc "\">\n    <decor>no</decor>\n    <maximized>yes</maximized>\n  </application>"; added=1 } print; next } {print}' "$OPENBOX_RC" > "$OPENBOX_RC.tmp" && mv "$OPENBOX_RC.tmp" "$OPENBOX_RC" || true
+          else
+            awk -v wc="$WC" '/<\/openbox_config>/{ print "<applications>\n  <application class=\"" wc "\">\n    <decor>no</decor>\n    <maximized>yes</maximized>\n  </application>\n</applications>"; print; next } {print}' "$OPENBOX_RC" > "$OPENBOX_RC.tmp" && mv "$OPENBOX_RC.tmp" "$OPENBOX_RC" || true
+          fi
+          command -v openbox >/dev/null 2>&1 && openbox --reconfigure >/dev/null 2>&1 || true
+        fi
+      fi
+    elif printf '%s' "$WM_NAME" | grep -qi xfwm4 >/dev/null 2>&1; then
+      # For xfwm4, attempt to hide taskbar/pager entries for the window.
+      xprop -id "$WIN" -f _NET_WM_STATE 32a -set _NET_WM_STATE _NET_WM_STATE_SKIP_TASKBAR,_NET_WM_STATE_SKIP_PAGER >/dev/null 2>&1 || true
+    fi
     # As a last resort, start a background monitor that watches for the window being
     # iconified (minimized) or losing its maximized state and restores it.
     # The monitor will also attempt to re-discover the window by PID if
@@ -271,10 +277,12 @@ if command -v wmctrl >/dev/null 2>&1; then
 
         # Re-apply decoration/state hints regularly (best-effort):
         if command -v xprop >/dev/null 2>&1; then
-          xprop -id "$CID" -f _NET_WM_ALLOWED_ACTIONS 32a -set _NET_WM_ALLOWED_ACTIONS _NET_WM_ACTION_CLOSE >/dev/null 2>&1 || true
-          xprop -id "$CID" -f _MOTIF_WM_HINTS 32c -set _MOTIF_WM_HINTS "0x2, 0x0, 0x0, 0x0, 0x0" >/dev/null 2>&1 || true
-          # set window type to DOCK which often removes decorations
-          xprop -id "$CID" -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK >/dev/null 2>&1 || true
+          if [ "${SKIP_HINTS:-0}" -eq 0 ]; then
+            xprop -id "$CID" -f _NET_WM_ALLOWED_ACTIONS 32a -set _NET_WM_ALLOWED_ACTIONS _NET_WM_ACTION_CLOSE >/dev/null 2>&1 || true
+            xprop -id "$CID" -f _MOTIF_WM_HINTS 32c -set _MOTIF_WM_HINTS "0x2, 0x0, 0x0, 0x0, 0x0" >/dev/null 2>&1 || true
+            # set window type to DOCK which often removes decorations (skip for terminals)
+            xprop -id "$CID" -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK >/dev/null 2>&1 || true
+          fi
         fi
 
         sleep 0.5
