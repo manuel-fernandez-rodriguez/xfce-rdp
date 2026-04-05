@@ -89,3 +89,30 @@ jobs:
           push: true
           tags: ${{ steps.get_tags.outputs.tags }}
           provenance: false
+
+      - name: Annotate Release with pushed images
+        if: github.event_name == 'release'
+        uses: actions/github-script@v6
+        env:
+          IMAGETAGS: ${{ steps.get_tags.outputs.tags }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tags = (process.env.IMAGETAGS || '').split(/\r?\n/).filter(Boolean);
+            if (tags.length === 0) {
+              core.info('No image tags to annotate.');
+            } else {
+              const release = context.payload.release || {};
+              const existing = release.body || '';
+              let addition = '\n\n### Published container images\n';
+              for (const t of tags) {
+                addition += `- ${t}\n`;
+              }
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id,
+                body: existing + addition
+              });
+              core.info('Release annotated with image links.');
+            }
