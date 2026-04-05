@@ -136,6 +136,13 @@ if command -v dbus-launch >/dev/null 2>&1; then
   eval "$(dbus-launch --sh-syntax --exit-with-session)" || true
 fi
 
+# Start XFCE settings daemon so GTK/xfconf XSETTINGS (theme, icons, fonts)
+# are available in this minimal single-app session. Without xfsettingsd
+# some apps (menus, toolbar icons) may not display icon theme elements.
+if command -v xfsettingsd >/dev/null 2>&1; then
+  setsid xfsettingsd >"$XDG_RUNTIME_DIR/xfsettingsd.log" 2>&1 & XS_PID=$! || true
+fi
+
 # start a lightweight window manager if none is running on this display
 WM_PID=
 # xprop may report different messages when the property is missing

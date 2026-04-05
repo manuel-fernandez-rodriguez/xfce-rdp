@@ -35,7 +35,14 @@ RUN apt-get update && \
         librsvg2-common \
         at-spi2-core \
         pm-utils \
+        xdg-utils \
         wmctrl \
+        # Theme / engine packages to provide a dark GTK theme and icons
+        arc-theme \
+        gtk2-engines-pixbuf \
+        gtk2-engines-murrine \
+        adwaita-icon-theme \
+        gnome-themes-extra \
     && apt-get autoremove -y --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
@@ -60,6 +67,17 @@ RUN chmod +x /etc/entrypoint.d/entrypoint.sh && chmod 644 /etc/entrypoint.d/entr
 # Prefer a 24-bit default depth so X and xrdp negotiate a 24bpp visual.
 RUN mkdir -p /etc/X11/xorg.conf.d && \
     printf 'Section "Screen"\n\tIdentifier "Screen0"\n\tDefaultDepth 24\n\tSubSection "Display"\n\t\tDepth 24\n\tEndSubSection\nEndSection\n' > /etc/X11/xorg.conf.d/99-xrdp-depth.conf
+
+# Provide system-wide XFCE defaults so new users get the Arc-Dark appearance
+RUN mkdir -p /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
+COPY xfce-defaults/xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
+COPY xfce-defaults/xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+
+# Populate /etc/skel so users created with `useradd -m` receive the XFCE defaults
+RUN mkdir -p /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml && \
+    cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/* /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/ && \
+    # ensure skel xsettings uses flat layout and permissions
+    chmod -R 0644 /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml || true
 
 # Ensure xrdp only advertises up to 24 bpp so clients must use 24-bit True Color.
 # If a max_bpp setting exists, replace it; otherwise add it under [globals].
