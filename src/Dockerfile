@@ -47,6 +47,10 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
 
+# Ensure a minimal system locale file exists so PAM modules that read
+# /etc/default/locale do not warn when it is missing in minimal containers.
+RUN printf 'LANG=C.UTF-8\n' > /etc/default/locale || true && chmod 0644 /etc/default/locale || true
+
 # Unset, so that it is not propagated to the container at runtime
 ENV DEBIAN_FRONTEND=
 

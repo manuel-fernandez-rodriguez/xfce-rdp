@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Helper functions for entrypoint.sh
 # - create_user: create a user, set password, configure sudo
-# - validate_users_json: validate USERS_CREDENTIALS JSON
+# - validate_runtime_config / load_runtime_config: validate and load runtime configuration JSON
 
 # Usage: create_user username password [sudo_flag] [singleapp]
 # Both username and password are required. If either is missing the function
@@ -306,9 +306,10 @@ XSESSION_TAIL
 #   $1 -> SKIP_ENTRYPOINT_HOOKS (0/1)
 #   $2 -> ENTRYPOINT_STRICT (0/1)
 #   $3 -> HOOK_ROOT (MANDATORY) - directory containing hooks (e.g. /etc/entrypoint.d)
-#   $4 -> USERS_CREDENTIALS (MANDATORY) - name of an array variable (passed by name)
-#         containing JSON objects (each element will be passed as a separate
-#         argument to the hooks). Use a nameref in the function to access it.
+#   $4 -> RUNTIME_CONFIG_PATH (MANDATORY) - path to a JSON file containing the
+#         runtime configuration. Hooks receive the path as their sole argument
+#         and may use `jq` to read and/or mutate the JSON (e.g. iterate
+#         .userCredentials[]).
 run_entrypoint_hooks() {
     SKIP_HOOKS="${1:-0}"
     ENTRYPOINT_STRICT="${2:-1}"
@@ -322,11 +323,10 @@ run_entrypoint_hooks() {
     fi
 
     if [ -z "${4:-}" ]; then
-      echo "[entrypoint] ERROR: missing USERS_CREDENTIALS (4th param)" >&2; 
+      echo "[entrypoint] ERROR: missing RUNTIME_CONFIG_PATH (4th param)" >&2; 
       exit 1
     fi
-    local -n USERS_CREDENTIALS="$4"
-
+    RUNTIME_CONFIG_PATH="$4"
 
     phases=(pre main post)
 
@@ -349,7 +349,7 @@ run_entrypoint_hooks() {
                 echo "[entrypoint] ERROR: hook $hook must define function entrypoint_hook" >&2
                 false
               else
-                entrypoint_hook users_credentials   # pass the array name so hook can `local -n u="$1"`
+                entrypoint_hook "$RUNTIME_CONFIG_PATH"
               fi
             ); then
               # handle failure per ENTRYPOINT_STRICT
@@ -365,58 +365,69 @@ run_entrypoint_hooks() {
     shopt -u nullglob 2>/dev/null || true
 }
 
-# Load USERS_CREDENTIALS from a secret file or environment and validate.
-# Supports USERS_CREDENTIALS provided either as a
-# file at /run/secrets/users_credentials (recommended for Docker secrets or
+# Load RUNTIME_CONFIG from a secret file or environment and validate.
+# Supports RUNTIME_CONFIG provided either as a
+# file at /run/secrets/runtime_config (recommended for Docker secrets or
 # Kubernetes Secrets mounted as files) or via the environment variable
-# USERS_CREDENTIALS. The content must be a JSON array of objects with fields
-# `username`, `password` and `sudo` (boolean).
-# On success prints the JSON to stdout. Returns non-zero on failure.
+# RUNTIME_CONFIG. The content must be a JSON object. On success the validated
+# JSON is written to /etc/entrypoint.d/runtime_config.json and the path to the
+# file is printed to stdout. Returns non-zero on failure.
 
-load_users_json() {
+load_runtime_config() {
     # Prefer secret file when present
-    if [ -f /run/secrets/users_credentials ]; then
-        echo "[entrypoint] Loading USERS_CREDENTIALS from /run/secrets/users_credentials" >&2
-        json=$(cat /run/secrets/users_credentials 2>/dev/null || true)
-    elif [ -n "${USERS_CREDENTIALS:-}" ]; then
-        echo "[entrypoint] Loading USERS_CREDENTIALS from environment" >&2
-        json="$USERS_CREDENTIALS"
+    if [ -f /run/secrets/runtime_config ]; then
+        echo "[entrypoint] Loading RUNTIME_CONFIG from /run/secrets/runtime_config" >&2
+        json=$(cat /run/secrets/runtime_config 2>/dev/null || true)
+    elif [ -n "${RUNTIME_CONFIG:-}" ]; then
+        echo "[entrypoint] Loading RUNTIME_CONFIG from environment" >&2
+        json="$RUNTIME_CONFIG"
     else
-        echo "[entrypoint] ERROR: USERS_CREDENTIALS not provided. Provide a JSON array via /run/secrets/users_credentials or the USERS_CREDENTIALS environment variable." >&2
+        echo "[entrypoint] ERROR: RUNTIME_CONFIG not provided. Provide a JSON object via /run/secrets/runtime_config or the RUNTIME_CONFIG environment variable." >&2
         return 1
     fi
 
     # validate (this will exit on failure)
-    validate_users_json "$json"
+    validate_runtime_config "$json"
 
     # write validated json to requested path
-    printf '%s' "$json"
+    dest="/etc/entrypoint.d/runtime_config.json"
+    mkdir -p "$(dirname "$dest")" 2>/dev/null || true
+    printf '%s' "$json" > "$dest" 2>/dev/null || true
+    echo "$dest"
 }
 
 
-# Validate the USERS_CREDENTIALS JSON input.
-# This performs a quick syntax check with `jq` and ensures every entry has
-# non-empty `username` and `password` fields. Exits with non-zero status on
-# any validation failure.
-validate_users_json() {
+# Validate the RUNTIME_CONFIG JSON input.
+# This performs a quick syntax check with `jq` and ensures `.userCredentials`
+# exists and is an array. It also checks each entry in that array has non-empty
+# `username` and `password` fields. Exits with non-zero status on any
+# validation failure.
+validate_runtime_config() {
     json="${1:-}"
     if [ -z "${json:-}" ]; then
-        echo "[entrypoint] ERROR: USERS_CREDENTIALS is empty" >&2
+        echo "[entrypoint] ERROR: RUNTIME_CONFIG is empty" >&2
         exit 1
     fi
 
     # Quick JSON syntax validation
     echo "$json" | jq empty >/dev/null 2>&1 || {
-        echo "[entrypoint] ERROR: USERS_CREDENTIALS contains invalid JSON" >&2
+        echo "[entrypoint] ERROR: RUNTIME_CONFIG contains invalid JSON" >&2
         exit 1
     }
 
+    # Ensure .userCredentials exists and is an array
+    is_array=$(echo "$json" | jq 'has("userCredentials") and (.userCredentials | type == "array")' 2>/dev/null || echo false)
+    if [ "$is_array" != "true" ]; then
+        echo "[entrypoint] ERROR: RUNTIME_CONFIG must contain a top-level \"userCredentials\" array" >&2
+        exit 1
+    fi
+
     # Ensure every entry contains both username and password (non-empty)
-    missing_count=$(echo "$json" | jq 'map(select((.username//"" )=="" or (.password//"" )=="")) | length' 2>/dev/null || echo 0)
+    missing_count=$(echo "$json" | jq '.userCredentials | map(select((.username//"" )=="" or (.password//"" )=="")) | length' 2>/dev/null || echo 0)
     if [ "${missing_count:-0}" -gt 0 ]; then
-        echo "[entrypoint] ERROR: USERS_CREDENTIALS contains ${missing_count} entry(ies) missing username or password" >&2
+        echo "[entrypoint] ERROR: RUNTIME_CONFIG.userCredentials contains ${missing_count} entry(ies) missing username or password" >&2
         echo "[entrypoint] Offending entries:" >&2
-        echo "$json" | jq 'map(select((.username//"" )=="" or (.password//"" )==""))' >&2 || true
+        echo "$json" | jq '.userCredentials | map(select((.username//"" )=="" or (.password//"" )==""))' >&2 || true
         exit 1
     fi
 }

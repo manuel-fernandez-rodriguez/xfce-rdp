@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xfce-rdp runtime configuration",
+  "type": "object",
+  "properties": {
+    "userCredentials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "username": { "type": "string", "minLength": 1 },
+          "password": { "type": "string", "minLength": 1 },
+          "sudo": { "type": "boolean" },
+          "singleApp": { "type": "string" }
+        },
+        "required": ["username", "password"],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": ["userCredentials"],
+  "additionalProperties": true
+}
