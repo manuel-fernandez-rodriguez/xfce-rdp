@@ -2,17 +2,20 @@
 set -e
 
 # Entrypoint
-# USERS_CREDENTIALS must be provided either
-# via /run/secrets/users_credentials or the
-# USERS_CREDENTIALS environment variable (JSON array).
+# RUNTIME_CONFIG must be provided either
+# via /run/secrets/runtime_config or the
+# RUNTIME_CONFIG environment variable (JSON object).
 
 
 # shellcheck source=src/entrypoint_helpers.sh
 . "$(dirname "$0")/entrypoint_helpers.sh"
 
-users_json="$(load_users_json)" || exit 1
+# Load runtime configuration and persist to a known path. The function prints
+# the path to the validated runtime config file on success.
+runtime_config_path="$(load_runtime_config)" || exit 1
 
-mapfile -t users_credentials < <(jq -c '.[]' <<<"$users_json" 2>/dev/null || true)
+# Read user credentials from the runtime config file and create users.
+mapfile -t users_credentials < <(jq -c '.userCredentials[]' "$runtime_config_path" 2>/dev/null || true)
 
 for u in "${users_credentials[@]}"; do
     [ -n "$u" ] || continue
@@ -24,9 +27,9 @@ for u in "${users_credentials[@]}"; do
 done
 
 # Run hooks (if any) before starting services or executing user command
-# Pass hook root then the name of the users_credentials array so the
-# function can create a nameref to iterate the array by reference.
-run_entrypoint_hooks "${SKIP_ENTRYPOINT_HOOKS:-0}" "${ENTRYPOINT_STRICT:-1}" "/etc/entrypoint.d" users_credentials
+# Pass hook root then the path to the persisted runtime config so hooks can
+# read or modify the JSON (hooks receive the path as their single argument).
+run_entrypoint_hooks "${SKIP_ENTRYPOINT_HOOKS:-0}" "${ENTRYPOINT_STRICT:-1}" "/etc/entrypoint.d" "$runtime_config_path"
 
 # If no args provided, run the default xrdp startup command
 if [ $# -eq 0 ]; then

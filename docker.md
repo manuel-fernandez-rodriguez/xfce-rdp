@@ -3,34 +3,35 @@
 docker build -t xfce-rdp .
 ```
 # Run
-Provide a JSON array of user objects via a Docker secret (recommended) or the
-`USERS_CREDENTIALS` environment variable. Each object must contain `username`,
+Provide a JSON runtime configuration object via a Docker secret (recommended)
+or the `RUNTIME_CONFIG` environment variable. The object must contain a
+top-level `userCredentials` array where each element contains `username`,
 `password` and, optionally `sudo` (boolean, default: false).
 
-Example JSON:
+Example runtime config JSON:
 
 ```json
-[{"username":"alice","password":"alicepw","sudo":true},
- {"username":"bob","password":"bobpw"}]
+{"userCredentials":[{"username":"alice","password":"alicepw","sudo":true},
+ {"username":"bob","password":"bobpw"}]}
 ```
 
-Preferred (secure) — provide users JSON as a Docker secret (Swarm):
+Preferred (secure) — provide runtime config JSON as a Docker secret (Swarm):
 ```bash
-echo '[{"username":"developer","password":"s3cr3t","sudo":true}]' > users.json
-docker secret create users_credentials users.json
-docker service create --name xfce-rdp --secret users_credentials --publish 33890:3389 xfce-rdp:latest
+echo '{"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}]}' > runtime_config.json
+docker secret create runtime_config runtime_config.json
+docker service create --name xfce-rdp --secret runtime_config --publish 33890:3389 xfce-rdp:latest
 ```
 
 Single-host (recommended over plain env) — bind-mount a read-only file into /run/secrets:
 ```bash
-echo '[{"username":"developer","password":"s3cr3t","sudo":true}]' > users.json
-docker run -v "$(pwd)/users.json:/run/secrets/users_credentials:ro" \
+echo '{"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}]}' > runtime_config.json
+docker run -v "$(pwd)/runtime_config.json:/run/secrets/runtime_config:ro" \
   -p 33890:3389 --shm-size=1g  -d --name xfce-rdp xfce-rdp:latest
 ```
 
-Less secure — provide JSON via an environment variable (visible in inspect):
+Less secure — provide runtime config JSON via an environment variable (visible in inspect):
 ```bash
-docker run -e USERS_CREDENTIALS='[{"username":"developer","password":"s3cr3t","sudo":true}]' -p 33890:3389 \
+docker run -e RUNTIME_CONFIG='{"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}]}' -p 33890:3389 \
   --shm-size=1g -d --name xfce-rdp xfce-rdp:latest
 ```
 
@@ -57,7 +58,7 @@ recommended options:
 # The helper will create and mount a deterministic named volume called
 # "${container}-home" (e.g. "xfce-rdp-home") if no --home-bind is provided.
 docker volume create devbox-home
-docker run -v devbox-home:/home -v "$(pwd)/users.json:/run/secrets/users_credentials:ro" \
+docker run -v devbox-home:/home -v "$(pwd)/runtime_config.json:/run/secrets/runtime_config:ro" \
   -p 33890:3389 --shm-size=1g -d --name xfce-rdp xfce-rdp:latest
 ```
 

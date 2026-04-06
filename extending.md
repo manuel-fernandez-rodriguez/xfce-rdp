@@ -2,6 +2,38 @@
 
 This document describes how to extend the `xfce-rdp` base image at build time and at container start time.
 
+## Runtime configuration schema (brief)
+
+The container entrypoint consumes a single runtime configuration JSON object. The object MUST contain a top-level
+`userCredentials` array where each element is an object with at least the following fields:
+
+- `username` (string, non-empty)
+- `password` (string, non-empty)
+
+Optional per-user fields supported by the base image include:
+
+- `sudo` (boolean) — when `true` the user will be granted passwordless sudo
+- `singleApp` (string) — a command line to run a single-application session for that user
+
+Example (minimal):
+
+```json
+{"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}]}
+```
+
+The runtime configuration may contain additional top-level keys which derived images
+or hooks can use to pass extra settings. A [machine-readable JSON Schema](runtime_config.schema.json) 
+is provided — use it with tools like `ajv` or
+`jq` to validate your config before deploying. Example validation with `jq`:
+
+```bash
+# quick structural check using jq
+jq empty runtime_config.json
+
+# or validate required fields using the schema with ajv (npm):
+npx ajv-cli validate -s runtime_config.schema.json -d runtime_config.json
+```
+
 ## Build-time: installing additional packages
 
 ### Approach
@@ -54,8 +86,17 @@ A hook script must:
   - Return `0` on success, non-zero on failure.
   - Avoid long-running blocking tasks. If a hook must start a background service, ensure it is supervised properly or backgrounded explicitly.
 
-- Hook function parameters:
-    - **$1**: An array argument with the USERS_CREDENTIALS parameters which were supplied as an ARG when running the container.
+ - Hook function parameters:
+    - **$1**: Path to the persisted runtime config JSON (e.g. `/etc/entrypoint.d/runtime_config.json`).
+      Hooks can use `jq` to read or modify the JSON. To iterate users:
+
+      ```bash
+      mapfile -t user_data < <(jq -c '.userCredentials[]' "$1" 2>/dev/null || true)
+      for u in "${user_data[@]}"; do
+        username=$(jq -r '.username // empty' <<<"$u")
+        echo "[entrypoint] Processing $username" >&2
+      done
+      ```
 
 ###  Notes about bind mounts and volumes:
   - Consumers may mount files or scripts into `/etc/entrypoint.d/{pre|main|post}` at runtime. The runner tolerates empty or missing directories and will ignore non-script files (`*.sh`).
@@ -73,7 +114,8 @@ A hook script must:
     ```bash
     #!/usr/bin/env bash
     entrypoint_hook() {
-      local -n user_data="$1"
+      runtime_config_path="$1"
+      mapfile -t user_data < <(jq -c '.userCredentials[]' "$runtime_config_path" 2>/dev/null || true)
       for u in "${user_data[@]}"; do
          username=$(jq -r '.username // empty' <<<"$u")
          echo "[entrypoint] Processing $username" >&2

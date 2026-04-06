@@ -58,18 +58,19 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-# Default users JSON (used only if ./users.json is not present)
-default_users='[{"username":"developer","password":"s3cr3t","sudo":true}, {"username":"developer2","password":"s3cr3t", "singleApp": "/usr/bin/xfce4-terminal" }, {"username":"developer3","password":"s3cr3t", "singleApp": "/usr/bin/xfce4-terminal" }]'
+# Default runtime config JSON (used only if ./runtime_config.json is not present)
+default_runtime_config='{"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}, {"username":"developer2","password":"s3cr3t", "singleApp": "/usr/bin/xfce4-terminal" }, {"username":"developer3","password":"s3cr3t", "singleApp": "/usr/bin/xfce4-terminal" }]}'
 
 # Build docker run arguments conditionally
 docker_args=()
 
-# If a local users.json exists, mount it as a read-only secret file. Otherwise pass the
-# USERS_CREDENTIALS environment variable.
-if [ -f ./users.json ]; then
-  docker_args+=( -v "$(pwd)/users.json:/run/secrets/users_credentials:ro" )
+# If a local runtime_config.json exists, mount it as a read-only secret file.
+# Otherwise pass the RUNTIME_CONFIG environment variable containing the runtime
+# configuration object.
+if [ -f ./runtime_config.json ]; then
+  docker_args+=( -v "$(pwd)/runtime_config.json:/run/secrets/runtime_config:ro" )
 else
-  docker_args+=( -e "USERS_CREDENTIALS=${default_users}" )
+  docker_args+=( -e "RUNTIME_CONFIG=${default_runtime_config}" )
 fi
 
 # If a host path was provided, bind-mount it at /home.

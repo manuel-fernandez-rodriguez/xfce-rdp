@@ -66,6 +66,15 @@ if command -v pipewire >/dev/null 2>&1; then
     [ -S "$XDG_RUNTIME_DIR/pulse/native" ] && break || sleep 0.1
   done
 
+  # If pw-cli is available, wait until WirePlumber/PipeWire have registered
+  # their globals (reduces pw-cli 'no global' transient errors seen when
+  # clients probe PipeWire too early). This is a best-effort short timeout.
+  if command -v pw-cli >/dev/null 2>&1; then
+    for i in $(seq 1 100); do
+      pw-cli info all 2>/dev/null | grep -q 'WirePlumber' && break || sleep 0.1
+    done
+  fi
+
   if command -v pactl >/dev/null 2>&1; then
     pactl info >/dev/null 2>&1 || true
     # attempt to load xrdp sink if available
@@ -114,9 +123,27 @@ cleanup()
 
 trap cleanup EXIT HUP TERM INT
 
+# Decide whether to honor a user-provided ~/.xsession file.
+# Only allow using ~/.xsession for single-app sessions when the runtime
+# configuration explicitly sets `singleApp` for this username. This avoids
+# accidental single-app boots when a user creates ~/.xsession manually.
+RUNTIME_CONFIG="/etc/entrypoint.d/runtime_config.json"
+IS_SINGLEAPP_USER=0
+if [ -f "$RUNTIME_CONFIG" ] && command -v jq >/dev/null 2>&1; then
+  CUR_USER=$(id -un 2>/dev/null || true)
+  if [ -n "$CUR_USER" ]; then
+    single_app_value=$(jq -r --arg u "$CUR_USER" '.userCredentials[] | select(.username==$u) | .singleApp // empty' "$RUNTIME_CONFIG" 2>/dev/null | sed -n '1p' || true)
+    if [ -n "$single_app_value" ]; then
+      IS_SINGLEAPP_USER=1
+    fi
+  fi
+fi
+
 
 # If user wants a single-app session, run it instead of starting XFCE.
-if [ -x "$HOME/.xsession" ]; then
+# Only honor a per-user ~/.xsession when the runtime config explicitly
+# provided a `singleApp` for this user (IS_SINGLEAPP_USER==1).
+if [ "${IS_SINGLEAPP_USER:-0}" -eq 1 ] && [ -x "$HOME/.xsession" ]; then
   echo "[startwm] Starting single-app session from $HOME/.xsession" >&2
   # export existing DISPLAY/XAUTHORITY if present (do not hardcode)
   [ -n "${DISPLAY:-}" ] && export DISPLAY
@@ -143,6 +170,7 @@ elif [ -n "${SINGLE_APP:-}" ]; then
 fi
 
 # Start the desktop session and wait; when it exits the script will run cleanup
+echo "[startwm] Starting xfce4" >&2
 startxfce4 &
 XFCE_PID=$!
 wait "$XFCE_PID"

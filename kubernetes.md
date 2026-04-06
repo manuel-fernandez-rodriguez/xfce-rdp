@@ -4,16 +4,19 @@ This is a short, practical guide to run the `xfce-rdp` image as a Kubernetes
 Pod, keeping secrets out of plain env-vars in production.
 
 ## Setting up users and passwords
-The container's entrypoint expects a JSON array of user objects with `username`,
+The container's entrypoint expects a runtime configuration JSON object with a
+top-level `userCredentials` array. Each element must contain `username`,
 `password` and optional `sudo` (boolean) fields. For example:
 ```json
-[
-  {"username":"developer","password":"s3cr3t","sudo":true},
-  {"username":"alice","password":"alicepw"},
-  {"username":"bob","password":"bobpw"}
-]
+{
+  "userCredentials":[
+    {"username":"developer","password":"s3cr3t","sudo":true},
+    {"username":"alice","password":"alicepw"},
+    {"username":"bob","password":"bobpw"}
+  ]
+}
 ```
-See in the examples of the following sections how to provide this JSON securely 
+See in the examples of the following sections how to provide this JSON securely
 via a Kubernetes Secret, or less securely via an environment variable for quick testing.
 
 ## Quick test (not recommended for production)
@@ -26,7 +29,7 @@ the manifest, but it can be useful for a quick test or demo.
 kubectl run xfce-rdp \
   --image=ghcr.io/manuel-fernandez-rodriguez/xfce-rdp:latest \
   --restart=Never --port=3389 --image-pull-policy=IfNotPresent \
-  --env="USERS_CREDENTIALS=[{\"username\":\"developer\",\"password\":\"s3cr3t\",\"sudo\":true}]"
+  --env='RUNTIME_CONFIG={"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}]}'
 ```
 
 - Forward the RDP port:
@@ -39,7 +42,7 @@ to modify the Pod spec inline. Example (bash):
 kubectl run xfce-rdp \
   --image=ghcr.io/manuel-fernandez-rodriguez/xfce-rdp:latest \
   --restart=Never --port=3389 --image-pull-policy=IfNotPresent \
-  --env="USERS_CREDENTIALS=[{\"username\":\"developer\",\"password\":\"s3cr3t\",\"sudo\":true}]" \
+  --env='RUNTIME_CONFIG={"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}]}' \
   --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"xfce-rdp","volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}]}}'
 ```
 
@@ -49,7 +52,7 @@ PowerShell (use single quotes around the JSON payload):
 kubectl run xfce-rdp `
   --image=ghcr.io/manuel-fernandez-rodriguez/xfce-rdp:latest `
   --restart=Never --port=3389 --image-pull-policy=IfNotPresent `
-  --env='USERS_CREDENTIALS=[{"username":"developer","password":"s3cr3t","sudo":true}]' `
+  --env='RUNTIME_CONFIG={"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}]}' `
   --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"xfce-rdp","volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}]}}'
 ```
 
@@ -57,10 +60,10 @@ Note: `--overrides` is handy for quick testing, but using a Pod manifest (as
 shown in the next section) is clearer and more reproducible. Also, `sizeLimit`
 may be ignored on older Kubernetes versions — test on your cluster.
 
-## Recommended: use a Secret mounted as `/run/secrets/users_credentials`
-1. Create a secret (key `users_credentials`) containing the JSON array:
+## Recommended: use a Secret mounted as `/run/secrets`
+1. Create a secret (key `runtime_config`) containing the runtime config JSON object:
    ```bash
-   kubectl create secret generic users-credentials --from-file=users_credentials=./users.json
+   kubectl create secret generic runtime-config --from-file=runtime_config=./runtime_config.json
    ```
 
 2. Pod manifest (save as `xfce-rdp-pod.yaml`):
@@ -86,10 +89,10 @@ spec:
   volumes:
   - name: user-secret
     secret:
-      secretName: users-credentials
+      secretName: runtime-config
       items:
-      - key: users_credentials
-        path: users_credentials
+      - key: runtime_config
+        path: runtime_config
   - name: dshm
     emptyDir:
       medium: Memory
@@ -156,24 +159,24 @@ docker push gcr.io/PROJECT_ID/xfce-rdp:latest
 
 Save the following manifests and apply them with `kubectl apply -f <file>`.
 
-`secret-users-credentials.yaml` (stores the users JSON array as a file under 
-`/run/secrets/users_credentials`):
+`secret-runtime-config.yaml` (stores the runtime config JSON object as a file under
+`/run/secrets/runtime_config`):
 
 ```yaml
 apiVersion: v1
 kind: Secret
 metadata:
-  name: users-credentials
+  name: runtime-config
 type: Opaque
 data:
-  # base64-encode your users.json and paste here, or use --from-file when creating
-  users_credentials: ""
+  # base64-encode your runtime_config.json and paste here, or use --from-file when creating
+  runtime_config: ""
 ```
 
 Example creation (recommended):
 
 ```bash
-kubectl create secret generic users-credentials --from-file=users_credentials=./users.json
+kubectl create secret generic runtime-config --from-file=runtime_config=./runtime_config.json
 ```
 
 `pvc.yaml` (PersistentVolumeClaim for `/home` persistence):
@@ -226,10 +229,10 @@ spec:
       volumes:
       - name: user-secret
         secret:
-          secretName: users-credentials
+          secretName: runtime-config
           items:
-          - key: users_credentials
-            path: users_credentials
+          - key: runtime_config
+            path: runtime_config
       - name: home
         persistentVolumeClaim:
           claimName: devbox-home-pvc
@@ -259,7 +262,7 @@ spec:
 3. Apply manifests
 
 ```bash
-kubectl apply -f secret-users-credentials.yaml
+kubectl apply -f secret-runtime-config.yaml
 kubectl apply -f pvc.yaml
 kubectl apply -f deployment.yaml
 kubectl apply -f service.yaml
