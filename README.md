@@ -40,7 +40,7 @@ docker run -e RUNTIME_CONFIG='{"userCredentials":[{"username":"developer","passw
   -p 33890:3389 --shm-size=1g -d --name xfce-rdp xfce-rdp:latest
 ```
 
-See more detailed instructions on [Docker setup](docs/docker.md).
+See more detailed instructions on [Docker setup](doc/docker.md).
 
 ## Quick Run on Kubernetes
 
@@ -52,16 +52,16 @@ kubectl run xfce-rdp \
   --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"xfce-rdp","volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}]}}'
 ```
 
-See more detailed instructions on [Kubernetes setup](docs/kubernetes.md).
+See more detailed instructions on [Kubernetes setup](doc/kubernetes.md).
 
-## Extending the image
+## Extending this image
 The image is designed to be extended with custom hooks that run at container 
 startup.
 
-See [Extending the xfce-rdp base image](docs/extending.md) for best practices 
+See [Extending the xfce-rdp base image](doc/extending.md) for best practices 
 and examples on how to add your own initialization logic without modifying 
 the base image.
 
-Or have look at the repo [dev-box](/manuel-fernandez-rodriguez/dev-box/) to
+Or have look at the repo [dev-box](https://github.com/manuel-fernandez-rodriguez/dev-box/) to
 see a real world example of an extended image based on `xfce-rdp` with a 
 bunch of preinstalled tools and customizations.
