@@ -82,6 +82,29 @@ create_user() {
     fi
 }
 
+# Create users from a validated runtime config JSON file.
+# Parameter:
+#   $1 -> path to the runtime config JSON (as produced by load_runtime_config)
+create_users() {
+    runtime_config_path="${1:-}"
+    if [ -z "${runtime_config_path:-}" ]; then
+        echo "[entrypoint] ERROR: create_users requires a runtime_config_path argument" >&2
+        return 1
+    fi
+
+    # Read user credentials from the runtime config file and create users.
+    mapfile -t users_credentials < <(jq -c '.userCredentials[]' "$runtime_config_path" 2>/dev/null || true)
+
+    for u in "${users_credentials[@]}"; do
+        [ -n "$u" ] || continue
+        uname=$(jq -r '.username // empty' <<<"$u")
+        upw=$(jq -r '.password // empty' <<<"$u")
+        usudo=$(jq -r '.sudo // false' <<<"$u")
+        singleApp=$(jq -r '.singleApp // empty' <<<"$u")
+        create_user "$uname" "$upw" "$usudo" "$singleApp"
+    done
+}
+
 
 # Create the ~/.xsession contents for a single-app session.
 # Parameters:

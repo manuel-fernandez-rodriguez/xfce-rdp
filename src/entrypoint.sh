@@ -14,17 +14,8 @@ set -e
 # the path to the validated runtime config file on success.
 runtime_config_path="$(load_runtime_config)" || exit 1
 
-# Read user credentials from the runtime config file and create users.
-mapfile -t users_credentials < <(jq -c '.userCredentials[]' "$runtime_config_path" 2>/dev/null || true)
-
-for u in "${users_credentials[@]}"; do
-    [ -n "$u" ] || continue
-    uname=$(jq -r '.username // empty' <<<"$u")
-    upw=$(jq -r '.password // empty' <<<"$u")
-    usudo=$(jq -r '.sudo // false' <<<"$u")
-    singleApp=$(jq -r '.singleApp // empty' <<<"$u")
-    create_user "$uname" "$upw" "$usudo" "$singleApp"
-done
+# Create users from the validated runtime config
+create_users "$runtime_config_path"
 
 # Run hooks (if any) before starting services or executing user command
 # Pass hook root then the path to the persisted runtime config so hooks can
