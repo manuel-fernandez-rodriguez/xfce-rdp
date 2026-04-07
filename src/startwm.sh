@@ -1,9 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # startxfce4 session for xrdp
 if [ -r /etc/profile ]; then
   . /etc/profile
 fi
+
+RUNTIME_CONFIG="/etc/xfce-rdp/runtime_config.json"
 
 unset DBUS_SESSION_BUS_ADDRESS
 
@@ -127,16 +129,30 @@ trap cleanup EXIT HUP TERM INT
 # Only allow using ~/.xsession for single-app sessions when the runtime
 # configuration explicitly sets `singleApp` for this username. This avoids
 # accidental single-app boots when a user creates ~/.xsession manually.
-RUNTIME_CONFIG="/etc/entrypoint.d/runtime_config.json"
+# Determine current username early so hooks can be informed regardless of
+# whether the runtime config file or `jq` are available.
+CUR_USER=$(id -un 2>/dev/null || true)
 IS_SINGLEAPP_USER=0
-if [ -f "$RUNTIME_CONFIG" ] && command -v jq >/dev/null 2>&1; then
-  CUR_USER=$(id -un 2>/dev/null || true)
-  if [ -n "$CUR_USER" ]; then
-    single_app_value=$(jq -r --arg u "$CUR_USER" '.userCredentials[] | select(.username==$u) | .singleApp // empty' "$RUNTIME_CONFIG" 2>/dev/null | sed -n '1p' || true)
-    if [ -n "$single_app_value" ]; then
-      IS_SINGLEAPP_USER=1
-    fi
+if [ -n "$CUR_USER" ] && [ -f "$RUNTIME_CONFIG" ] && command -v jq >/dev/null 2>&1; then
+  single_app_value=$(jq -r --arg u "$CUR_USER" '.userCredentials[] | select(.username==$u) | .singleApp // empty' "$RUNTIME_CONFIG" 2>/dev/null | sed -n '1p' || true)
+  if [ -n "$single_app_value" ]; then
+    IS_SINGLEAPP_USER=1
   fi
+fi
+
+# entrypoint helpers are required for startwm;
+HELPERS_SCRIPT="/etc/xfce-rdp/entrypoint_helpers.sh"
+if [ -r "$HELPERS_SCRIPT" ]; then
+  # shellcheck source=src/entrypoint_helpers.sh
+  . "$HELPERS_SCRIPT"
+else
+  echo "[startwm] ERROR: required helper script $HELPERS_SCRIPT not found or unreadable" >&2
+  exit 1
+fi
+
+# run hooks under /etc/xfce-rdp/hooks/startwm with phase 'main' if available
+if command -v run_hooks >/dev/null 2>&1; then
+  run_hooks "/etc/xfce-rdp/hooks/startwm" "main" "$RUNTIME_CONFIG" 0 "${CUR_USER:-}"
 fi
 
 

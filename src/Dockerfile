@@ -62,15 +62,25 @@ RUN printf 'allowed_users=anybody\n' > /etc/X11/Xwrapper.config && \
 COPY startwm.sh /etc/xrdp/startwm.sh
 RUN chmod +x /etc/xrdp/startwm.sh
 
-# Copy entrypoint which will create user at runtime based on environment variables,
+# Copy entrypoint which will create users at runtime based on runtime_config,
 # run any custom entrypoint hooks, and set up the desktop environment
-COPY entrypoint.sh /etc/entrypoint.d/entrypoint.sh
-COPY entrypoint_helpers.sh /etc/entrypoint.d/entrypoint_helpers.sh
-RUN chmod +x /etc/entrypoint.d/entrypoint.sh && chmod 644 /etc/entrypoint.d/entrypoint_helpers.sh || true
+COPY entrypoint.sh /etc/xfce-rdp/entrypoint.sh
+COPY entrypoint_helpers.sh /etc/xfce-rdp/entrypoint_helpers.sh
+RUN chmod +x /etc/xfce-rdp/entrypoint.sh && chmod 644 /etc/xfce-rdp/entrypoint_helpers.sh || true
 
 # Prefer a 24-bit default depth so X and xrdp negotiate a 24bpp visual.
 RUN mkdir -p /etc/X11/xorg.conf.d && \
     printf 'Section "Screen"\n\tIdentifier "Screen0"\n\tDefaultDepth 24\n\tSubSection "Display"\n\t\tDepth 24\n\tEndSubSection\nEndSection\n' > /etc/X11/xorg.conf.d/99-xrdp-depth.conf
+
+# Ensure xrdp only advertises up to 24 bpp so clients must use 24-bit True Color.
+# If a max_bpp setting exists, replace it; otherwise add it under [globals].
+RUN if [ -f /etc/xrdp/xrdp.ini ]; then \
+      if grep -q '^max_bpp=' /etc/xrdp/xrdp.ini; then \
+        sed -i 's/^max_bpp=.*/max_bpp=24/' /etc/xrdp/xrdp.ini; \
+      else \
+        sed -i '/^\[globals\]/a max_bpp=24' /etc/xrdp/xrdp.ini; \
+      fi; \
+    fi
 
 # Provide system-wide XFCE defaults so new users get the Arc-Dark appearance
 RUN mkdir -p /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
@@ -82,16 +92,6 @@ RUN mkdir -p /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml && \
     cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/* /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/ && \
     # ensure skel xsettings uses flat layout and permissions
     chmod -R 0644 /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml || true
-
-# Ensure xrdp only advertises up to 24 bpp so clients must use 24-bit True Color.
-# If a max_bpp setting exists, replace it; otherwise add it under [globals].
-RUN if [ -f /etc/xrdp/xrdp.ini ]; then \
-      if grep -q '^max_bpp=' /etc/xrdp/xrdp.ini; then \
-        sed -i 's/^max_bpp=.*/max_bpp=24/' /etc/xrdp/xrdp.ini; \
-      else \
-        sed -i '/^\[globals\]/a max_bpp=24' /etc/xrdp/xrdp.ini; \
-      fi; \
-    fi
 
 # Configure PAM for xrdp-sesman to auto-unlock the GNOME keyring on login.
 # Insert pam_gnome_keyring lines into /etc/pam.d/xrdp-sesman if the file exists
@@ -123,4 +123,4 @@ RUN passwd -l root || true && \
 # Expose XRDP port
 EXPOSE 3389
 
-ENTRYPOINT ["/etc/entrypoint.d/entrypoint.sh"]
+ENTRYPOINT ["/etc/xfce-rdp/entrypoint.sh"]

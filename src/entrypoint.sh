@@ -20,7 +20,7 @@ create_users "$runtime_config_path"
 # Run hooks (if any) before starting services or executing user command
 # Pass hook root then the path to the persisted runtime config so hooks can
 # read or modify the JSON (hooks receive the path as their single argument).
-run_entrypoint_hooks "${SKIP_ENTRYPOINT_HOOKS:-0}" "${ENTRYPOINT_STRICT:-1}" "/etc/entrypoint.d" "$runtime_config_path"
+run_entrypoint_hooks "${SKIP_ENTRYPOINT_HOOKS:-0}" "${ENTRYPOINT_STRICT:-1}" "/etc/xfce-rdp/hooks/entrypoint" "$runtime_config_path"
 
 # If no args provided, run the default xrdp startup command
 if [ $# -eq 0 ]; then

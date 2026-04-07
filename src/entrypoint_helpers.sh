@@ -328,7 +328,7 @@ XSESSION_TAIL
 # Parameters:
 #   $1 -> SKIP_ENTRYPOINT_HOOKS (0/1)
 #   $2 -> ENTRYPOINT_STRICT (0/1)
-#   $3 -> HOOK_ROOT (MANDATORY) - directory containing hooks (e.g. /etc/entrypoint.d)
+#   $3 -> HOOK_ROOT (MANDATORY) - directory containing hooks (e.g. /etc/xfce-rdp)
 #   $4 -> RUNTIME_CONFIG_PATH (MANDATORY) - path to a JSON file containing the
 #         runtime configuration. Hooks receive the path as their sole argument
 #         and may use `jq` to read and/or mutate the JSON (e.g. iterate
@@ -350,38 +350,62 @@ run_entrypoint_hooks() {
       exit 1
     fi
     RUNTIME_CONFIG_PATH="$4"
+    # Delegate to generic run_hooks implementation
+    run_hooks "$HOOK_ROOT" "pre main post" "$RUNTIME_CONFIG_PATH" "$ENTRYPOINT_STRICT"
+}
 
-    phases=(pre main post)
 
-    # If no hook dir exists, nothing to do
+# Generic hook runner
+# Usage: run_hooks HOOK_ROOT PHASES RUNTIME_CONFIG_PATH [STRICT] [EXTRA_ARGS...]
+# - HOOK_ROOT: root directory containing phase subdirs (e.g. /etc/xfce-rdp/hooks/entrypoint)
+# - PHASES: space-separated list of phase names to process (e.g. "pre main post")
+# - RUNTIME_CONFIG_PATH: path to runtime config json (may be empty)
+# - STRICT: 0/1 whether to exit on hook failure (default 1)
+# - EXTRA_ARGS: any extra args forwarded to hook functions
+run_hooks() {
+    HOOK_ROOT="${1:-}"
+    PHASES_STR="${2:-}"
+    RUNTIME_CONFIG_PATH="${3:-}"
+    STRICT="${4:-1}"
+    shift 4 || true
+    EXTRA_ARGS=("$@")
+
+    if [ -z "${HOOK_ROOT:-}" ]; then
+        echo "[hooks] ERROR: run_hooks requires HOOK_ROOT" >&2
+        return 1
+    fi
+
+    # iterate phases
     shopt -s nullglob 2>/dev/null || true
-    for phase in "${phases[@]}"; do
+    for phase in $PHASES_STR; do
         dir="$HOOK_ROOT/$phase"
         [ -d "$dir" ] || continue
 
-        # Collect and sort hooks in natural order (respects numeric prefixes)
         mapfile -t hooks < <(printf '%s\n' "$dir"/*.sh 2>/dev/null | sort -V) || true
         for hook in "${hooks[@]}"; do
             [ -n "$hook" ] || continue
             [ -f "$hook" ] || continue
-            
-            echo "[entrypoint] running hook $hook"
+
+            echo "[hooks] running hook $hook (phase=$phase)"
+
+            # Export some context for hooks
+            HOOK_ROOT="$HOOK_ROOT"
+            HOOK_PHASE="$phase"
+            HOOK_STRICT="$STRICT"
             if ! (
-              . "$hook"
-              if ! declare -f entrypoint_hook >/dev/null 2>&1; then
-                echo "[entrypoint] ERROR: hook $hook must define function entrypoint_hook" >&2
-                false
-              else
-                entrypoint_hook "$RUNTIME_CONFIG_PATH"
-              fi
+                export HOOK_ROOT HOOK_PHASE HOOK_STRICT
+                . "$hook"
+                # prefer function named hook; otherwise allow top-level script
+                if declare -f hook >/dev/null 2>&1; then
+                    hook "$RUNTIME_CONFIG_PATH" "${EXTRA_ARGS[@]}"
+                fi
             ); then
-              # handle failure per ENTRYPOINT_STRICT
-              if [ "${ENTRYPOINT_STRICT}" -eq 1 ]; then
-                  echo "[entrypoint] exiting due to hook failure and ENTRYPOINT_STRICT=1" >&2
-                  exit 1
-              else
-                  echo "[entrypoint] continuing despite hook failure (ENTRYPOINT_STRICT!=1)"
-              fi
+                if [ "$STRICT" -eq 1 ]; then
+                    echo "[hooks] exiting due to hook failure and STRICT=1" >&2
+                    return 1
+                else
+                    echo "[hooks] continuing despite hook failure (STRICT!=1)" >&2
+                fi
             fi
         done
     done
@@ -393,7 +417,7 @@ run_entrypoint_hooks() {
 # file at /run/secrets/runtime_config (recommended for Docker secrets or
 # Kubernetes Secrets mounted as files) or via the environment variable
 # RUNTIME_CONFIG. The content must be a JSON object. On success the validated
-# JSON is written to /etc/entrypoint.d/runtime_config.json and the path to the
+# JSON is written to /etc/xfce-rdp/runtime_config.json and the path to the
 # file is printed to stdout. Returns non-zero on failure.
 
 load_runtime_config() {
@@ -413,7 +437,7 @@ load_runtime_config() {
     validate_runtime_config "$json"
 
     # write validated json to requested path
-    dest="/etc/entrypoint.d/runtime_config.json"
+    dest="/etc/xfce-rdp/runtime_config.json"
     mkdir -p "$(dirname "$dest")" 2>/dev/null || true
     printf '%s' "$json" > "$dest" 2>/dev/null || true
     echo "$dest"

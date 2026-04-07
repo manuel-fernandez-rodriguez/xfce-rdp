@@ -56,7 +56,7 @@ npx ajv-cli validate -s runtime_config.schema.json -d runtime_config.json
 
 ## Runtime: deterministic entrypoint hook runner
 
-- Hook root directory: `/etc/entrypoint.d/`
+- Hook root directory: `/etc/xfce-rdp/hooks/entrypoint`
 
 ### Phases (processed in order):
   - `pre`
@@ -80,45 +80,58 @@ npx ajv-cli validate -s runtime_config.schema.json -d runtime_config.json
 A hook script must:
   - Be a bash script (e.g. `#!/usr/bin/env bash`).
   - Be idempotent, as it will be run at every container start.
-  - Be writable only by the user running the entrypoint (root by default), but readable for others (`chmod 644`).  
-  - Define a functión named `entrypoint_hook`. 
+  - Be writable only by the user running the entrypoint (root by default), but readable for others (`chmod 644`).
+  - Define a function named `hook`.
   - Log actions to stdout/stderr.
   - Return `0` on success, non-zero on failure.
   - Avoid long-running blocking tasks. If a hook must start a background service, ensure it is supervised properly or backgrounded explicitly.
 
- - Hook function parameters:
-    - **$1**: Path to the persisted runtime config JSON (e.g. `/etc/entrypoint.d/runtime_config.json`).
-      Hooks can use `jq` to read or modify the JSON. To iterate users:
+ - Hook function parameters and environment:
+    - The hook runner calls `hook` (if defined) with the runtime config JSON path 
+      (e.g. `/etc/xfce-rdp/runtime_config.json`) as the first positional parameter 
+      followed by any extra args forwarded by the caller. For example, entrypoint 
+      hooks are called with just the runtime config path, while startwm hooks may 
+      be called with the runtime config path and the current username.
+    - Environment variables exported for the hook while it runs: 
+        - `HOOK_ROOT` (root dir passed to runner)
+        - `HOOK_PHASE` (phase name)
+        - `HOOK_STRICT` (0/1 behavior on failure).
 
-      ```bash
-      mapfile -t user_data < <(jq -c '.userCredentials[]' "$1" 2>/dev/null || true)
+    Example: iterate userCredentials from the provided runtime config path (first arg):
+
+    ```bash
+    hook() {
+      runtime_config_path="$1"
+      mapfile -t user_data < <(jq -c '.userCredentials[]' "$runtime_config_path" 2>/dev/null || true)
       for u in "${user_data[@]}"; do
         username=$(jq -r '.username // empty' <<<"$u")
-        echo "[entrypoint] Processing $username" >&2
+        echo "[hooks] Processing $username" >&2
       done
-      ```
+      return 0
+    }
+    ```
 
 ###  Notes about bind mounts and volumes:
-  - Consumers may mount files or scripts into `/etc/entrypoint.d/{pre|main|post}` at runtime. The runner tolerates empty or missing directories and will ignore non-script files (`*.sh`).
-  - Mounting `/etc/entrypoint.d/` directly is not recommended as it would override the entrypoint.sh script itself.
+  - Consumers may mount files or scripts into `/etc/xfce-rdp/hooks/entrypoint/{pre|main|post}` at runtime. The runner tolerates empty or missing directories and will ignore non-script files (`*.sh`).
+  - Mounting `/etc/xfce-rdp/` directly is not recommended as it would override the entrypoint.sh script itself.
 
 ## Examples:
   - Add a hook from a derived image at build time:
 
     ```Dockerfile
     FROM {repo}/xfce-rdp:latest
-    COPY hooks/010-setup-home.sh /etc/entrypoint.d/pre/500-sample-hook.sh
-    RUN chmod 644 /etc/entrypoint.d/pre/500-sample-hook.sh
+    COPY hooks/010-setup-home.sh /etc/xfce-rdp/hooks/entrypoint/pre/500-sample-hook.sh
+    RUN chmod 644 /etc/xfce-rdp/hooks/entrypoint/pre/500-sample-hook.sh
     ```
   - Then in `500-sample-hook.sh`, something like:
     ```bash
     #!/usr/bin/env bash
-    entrypoint_hook() {
+    hook() {
       runtime_config_path="$1"
       mapfile -t user_data < <(jq -c '.userCredentials[]' "$runtime_config_path" 2>/dev/null || true)
       for u in "${user_data[@]}"; do
          username=$(jq -r '.username // empty' <<<"$u")
-         echo "[entrypoint] Processing $username" >&2
+         echo "[hooks] Processing $username" >&2
       done
       return 0
     }
@@ -126,7 +139,7 @@ A hook script must:
   - Or provide hooks via a volume at runtime:
 
     ```sh
-    docker run -v $(pwd)/myhooks:/etc/entrypoint.d/main yourimage:tag
+    docker run -v $(pwd)/myhooks:/etc/xfce-rdp/hooks/entrypoint/main yourimage:tag
     ```  
 
 3) Documentation and contract
