@@ -13,12 +13,25 @@
 
 ## Overview
 **Debian Trixie** multiuser desktop environment based on **XFCE4**, accessible 
-via Remote Desktop Protocol (RDP), with preinstalled:
+via Remote Desktop Protocol (RDP), meant to be used as a base image, but fully 
+functional as is.
 
-- .NET10 SDK
-- Visual Studio Code
-- C# DevKit
-- Firefox
+Features include:
+
+- Debian Trixie base image.
+- XFCE4 desktop environment.
+- XRDP server for RDP access.
+- Support for multiple concurrent users with individual credentials.
+- User credentials configuration via environment variables/secret files.
+- Support for granting selected users sudo privileges through configuration.
+- Support for single application mode (launching a specific app instead 
+  of the full desktop for designated users through configuration).
+- Automatic user creation and password setup at container startup.
+- Root account locked by default for security.
+- Root access throught RDP disabled.
+- Optimized for a balance between low resource usage, fast startup times and
+  comfortable desktop experience.
+- Designed with a focus on extensibility.
 
 ## Quick Run on Docker
 
@@ -27,7 +40,7 @@ docker run -e RUNTIME_CONFIG='{"userCredentials":[{"username":"developer","passw
   -p 33890:3389 --shm-size=1g -d --name xfce-rdp xfce-rdp:latest
 ```
 
-See more detailed instructions on [Docker setup](docker.md).
+See more detailed instructions on [Docker setup](docs/docker.md).
 
 ## Quick Run on Kubernetes
 
@@ -39,9 +52,16 @@ kubectl run xfce-rdp \
   --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"xfce-rdp","volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}]}}'
 ```
 
-See more detailed instructions on [Kubernetes setup](kubernetes.md).
+See more detailed instructions on [Kubernetes setup](docs/kubernetes.md).
 
 ## Extending the image
-The image is designed to be extended with custom hooks that run at container startup.
+The image is designed to be extended with custom hooks that run at container 
+startup.
 
-See [Extending the xfce-rdp base image](extending.md) for best practices and examples on how to add your own initialization logic without modifying the base image.
+See [Extending the xfce-rdp base image](docs/extending.md) for best practices 
+and examples on how to add your own initialization logic without modifying 
+the base image.
+
+Or have look at the repo [dev-box](/manuel-fernandez-rodriguez/dev-box/) to
+see a real world example of an extended image based on `xfce-rdp` with a 
+bunch of preinstalled tools and customizations.
