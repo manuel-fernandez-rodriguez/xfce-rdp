@@ -66,7 +66,10 @@ RUN chmod +x /etc/xrdp/startwm.sh
 # run any custom entrypoint hooks, and set up the desktop environment
 COPY entrypoint.sh /etc/xfce-rdp/entrypoint.sh
 COPY entrypoint_helpers.sh /etc/xfce-rdp/entrypoint_helpers.sh
-RUN chmod +x /etc/xfce-rdp/entrypoint.sh && chmod 644 /etc/xfce-rdp/entrypoint_helpers.sh || true
+COPY startwm_helpers.sh /etc/xfce-rdp/startwm_helpers.sh
+COPY hooks.sh /etc/xfce-rdp/hooks.sh
+RUN chmod +x /etc/xfce-rdp/entrypoint.sh && chmod 644 /etc/xfce-rdp/entrypoint_helpers.sh /etc/xfce-rdp/startwm_helpers.sh || true
+RUN chmod 644 /etc/xfce-rdp/hooks.sh || true
 
 # Prefer a 24-bit default depth so X and xrdp negotiate a 24bpp visual.
 RUN mkdir -p /etc/X11/xorg.conf.d && \
