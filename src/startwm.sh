@@ -43,7 +43,7 @@ fi
 # Call run_hooks directly (hooks.sh provides it) and pass runtime config and
 # current user as extra arg.
 if command -v run_hooks >/dev/null 2>&1; then
-  run_hooks "/etc/xfce-rdp/hooks/startwm" "main" "$RUNTIME_CONFIG" 0 "${CUR_USER:-}"
+  run_hooks "user-login" "main" "${CUR_USER:-}"
 fi
 
 # If user wants a single-app session, run it instead of starting XFCE.

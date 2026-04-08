@@ -19,9 +19,8 @@ runtime_config_path="$(load_runtime_config)" || exit 1
 create_users "$runtime_config_path"
 
 # Run hooks (if any) before starting services or executing user command.
-# Call the generic run_hooks directly (hooks.sh is sourced by entrypoint_helpers)
 if command -v run_hooks >/dev/null 2>&1; then
-    run_hooks "/etc/xfce-rdp/hooks/entrypoint" "pre main post" "$runtime_config_path" "${ENTRYPOINT_STRICT:-1}"
+    run_hooks "container-start" "pre main post"
 fi
 
 # If no args provided, run the default xrdp startup command

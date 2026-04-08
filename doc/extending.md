@@ -4,8 +4,9 @@ This document describes how to extend the `xfce-rdp` base image at build time an
 
 ## Runtime configuration schema (brief)
 
-The container entrypoint consumes a single runtime configuration JSON object. The object MUST contain a top-level
-`userCredentials` array where each element is an object with at least the following fields:
+The runtime configuration consist in a single runtime configuration JSON object. 
+The object MUST contain a top-level `userCredentials` array where each element
+is an object with at least the following fields:
 
 - `username` (string, non-empty)
 - `password` (string, non-empty)
@@ -13,7 +14,8 @@ The container entrypoint consumes a single runtime configuration JSON object. Th
 Optional per-user fields supported by the base image include:
 
 - `sudo` (boolean) — when `true` the user will be granted passwordless sudo
-- `singleApp` (string) — a command line to run a single-application session for that user
+- `singleApp` (string) — a command line to run a single-application session for 
+   that user
 
 Example (minimal):
 
@@ -21,10 +23,12 @@ Example (minimal):
 {"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}]}
 ```
 
-The runtime configuration may contain additional top-level keys which derived images
-or hooks can use to pass extra settings. A [machine-readable JSON Schema](runtime_config.schema.json) 
-is provided — use it with tools like `ajv` or
-`jq` to validate your config before deploying. Example validation with `jq`:
+The runtime configuration may contain additional top-level keys which derived 
+images or hooks can use to pass extra settings. A 
+[machine-readable JSON Schema](runtime_config.schema.json) is provided — use it
+with tools like `ajv` or `jq` to validate your config before deploying. 
+
+Example validation with `jq`:
 
 ```bash
 # quick structural check using jq
@@ -54,9 +58,10 @@ npx ajv-cli validate -s runtime_config.schema.json -d runtime_config.json
   - Pin package versions if you need reproducible builds.
   - Document any assumptions about the base image in your derived Dockerfile comments.
 
-## Runtime: deterministic entrypoint hook runner
+## Runtime: deterministic hook runner
 
-- Hook root directory: `/etc/xfce-rdp/hooks/entrypoint`
+- Hook root directory: `/etc/xfce-rdp/hooks/`
+- Hook directory: `/etc/xfce-rdp/hooks/{hook-name}`
 
 ### Phases (processed in order):
   - `pre`
@@ -68,19 +73,18 @@ npx ajv-cli validate -s runtime_config.schema.json -d runtime_config.json
   - Three digits allow room for inserting new scripts between existing ones.
 
 ###  Execution order and behavior
-  - The entrypoint will process `pre`, then `main`, then `post` directories.
+  - The runner will process `pre`, then `main`, then `post` directories.
   - Within each directory, scripts are sorted using a natural version sort (`sort -V`) which respects the numeric prefixes.
   - Only script files (`+.sh`) are run; non-script files are ignored.
 
-###  Environment variables controlling behavior:
-  - `SKIP_ENTRYPOINT_HOOKS=1` -> skip running all hooks (useful for debugging).
-  - `ENTRYPOINT_STRICT` -> if set to `1` (default) the entrypoint exits on first failing hook; if `0` it logs failures and continues.
+###  Environment variables controlling behavior
+  - `STRICT_HOOKS` -> if set to `1` (default) the runner exits on first failing hook; if `0` it logs failures and continues.
 
 ###  Hook script contract:
 A hook script must:
   - Be a bash script (e.g. `#!/usr/bin/env bash`).
   - Be idempotent, as it will be run at every container start.
-  - Be writable only by the user running the entrypoint (root by default), but readable for others (`chmod 644`).
+  - Be writable only by the user running the container (root by default), but readable for others (`chmod 644`).
   - Define a function named `hook`.
   - Log actions to stdout/stderr.
   - Return `0` on success, non-zero on failure.
@@ -89,8 +93,8 @@ A hook script must:
  - Hook function parameters and environment:
     - The hook runner calls `hook` (if defined) with the runtime config JSON path 
       (e.g. `/etc/xfce-rdp/runtime_config.json`) as the first positional parameter 
-      followed by any extra args forwarded by the caller. For example, entrypoint 
-      hooks are called with just the runtime config path, while startwm hooks may 
+      followed by any extra args forwarded by the caller. For example, `container-start` 
+      hooks are called with just the runtime config path, while `user-login` hooks are 
       be called with the runtime config path and the current username.
     - Environment variables exported for the hook while it runs: 
         - `HOOK_ROOT` (root dir passed to runner)
@@ -112,16 +116,18 @@ A hook script must:
     ```
 
 ###  Notes about bind mounts and volumes:
-  - Consumers may mount files or scripts into `/etc/xfce-rdp/hooks/entrypoint/{pre|main|post}` at runtime. The runner tolerates empty or missing directories and will ignore non-script files (`*.sh`).
-  - Mounting `/etc/xfce-rdp/` directly is not recommended as it would override the entrypoint.sh script itself.
+  - Consumers may mount files or scripts into `/etc/xfce-rdp/hooks/{hook-name}/{pre|main|post}` at runtime. 
+  - The runner tolerates empty or missing directories and will ignore non-script files (`*.sh`).
+  - Mounting `/etc/xfce-rdp/` directly is not recommended as it would override 
+    the default configuration scripts themselves.
 
 ## Examples:
   - Add a hook from a derived image at build time:
 
     ```Dockerfile
     FROM {repo}/xfce-rdp:latest
-    COPY hooks/010-setup-home.sh /etc/xfce-rdp/hooks/entrypoint/pre/500-sample-hook.sh
-    RUN chmod 644 /etc/xfce-rdp/hooks/entrypoint/pre/500-sample-hook.sh
+    COPY hooks/010-setup-home.sh /etc/xfce-rdp/hooks/container-start/pre/500-sample-hook.sh
+    RUN chmod 644 /etc/xfce-rdp/hooks/container-start/pre/500-sample-hook.sh
     ```
   - Then in `500-sample-hook.sh`, something like:
     ```bash
@@ -139,7 +145,7 @@ A hook script must:
   - Or provide hooks via a volume at runtime:
 
     ```sh
-    docker run -v $(pwd)/myhooks:/etc/xfce-rdp/hooks/entrypoint/main yourimage:tag
+    docker run -v $(pwd)/myhooks:/etc/xfce-rdp/hooks/container-start/main yourimage:tag
     ```  
 
 3) Documentation and contract

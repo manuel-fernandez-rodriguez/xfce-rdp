@@ -59,17 +59,17 @@ RUN printf 'allowed_users=anybody\n' > /etc/X11/Xwrapper.config && \
     chmod 0444 /etc/X11/Xwrapper.config && \
     chmod +x /usr/share/xsessions/startxfce4 || true
 
+# Copy the custom startwm.sh script into the image to set up the XRDP session to launch XFCE.
 COPY startwm.sh /etc/xrdp/startwm.sh
-RUN chmod +x /etc/xrdp/startwm.sh
 
-# Copy entrypoint which will create users at runtime based on runtime_config,
-# run any custom entrypoint hooks, and set up the desktop environment
-COPY entrypoint.sh /etc/xfce-rdp/entrypoint.sh
-COPY entrypoint_helpers.sh /etc/xfce-rdp/entrypoint_helpers.sh
-COPY startwm_helpers.sh /etc/xfce-rdp/startwm_helpers.sh
-COPY hooks.sh /etc/xfce-rdp/hooks.sh
-RUN chmod +x /etc/xfce-rdp/entrypoint.sh && chmod 644 /etc/xfce-rdp/entrypoint_helpers.sh /etc/xfce-rdp/startwm_helpers.sh || true
-RUN chmod 644 /etc/xfce-rdp/hooks.sh || true
+# Copy entrypoint and helper scripts
+COPY entrypoint.sh entrypoint_helpers.sh startwm_helpers.sh hooks.sh runtime_config.sh /etc/xfce-rdp/
+
+# Apply the appropiate permissions to the scripts. startwm.sh must be executable by xrdp, 
+# and the entrypoint and helper scripts should be readable by all users but only writable by root.
+RUN chmod +x /etc/xrdp/startwm.sh && \
+    chmod +x /etc/xfce-rdp/entrypoint.sh && \
+    chmod 644 /etc/xfce-rdp/entrypoint_helpers.sh /etc/xfce-rdp/startwm_helpers.sh /etc/xfce-rdp/hooks.sh /etc/xfce-rdp/runtime_config.sh || true
 
 # Prefer a 24-bit default depth so X and xrdp negotiate a 24bpp visual.
 RUN mkdir -p /etc/X11/xorg.conf.d && \

@@ -1,24 +1,31 @@
 #!/usr/bin/env bash
-# Generic hook runner (shared)
-# Usage: run_hooks HOOK_ROOT PHASES RUNTIME_CONFIG_PATH [STRICT] [EXTRA_ARGS...]
-# - HOOK_ROOT: root directory containing phase subdirs (e.g. /etc/xfce-rdp/hooks/entrypoint)
+## Generic hook runner (shared)
+# Usage: run_hooks HOOK_NAME PHASES RUNTIME_CONFIG_PATH [EXTRA_ARGS...]
+# - HOOK_NAME: name of the hook root dir under /etc/xfce-rdp/hooks (e.g. "container-start")
 # - PHASES: space-separated list of phase names to process (e.g. "pre main post")
 # - RUNTIME_CONFIG_PATH: path to runtime config json (may be empty)
-# - STRICT: 0/1 whether to exit on hook failure (default 1)
 # - EXTRA_ARGS: any extra args forwarded to hook functions
 
 run_hooks() {
-    HOOK_ROOT="${1:-}"
+    HOOK_NAME="${1:-}"
     PHASES_STR="${2:-}"
-    RUNTIME_CONFIG_PATH="${3:-}"
-    STRICT="${4:-1}"
-    shift 4 || true
+    shift 2 || true
     EXTRA_ARGS=("$@")
 
-    if [ -z "${HOOK_ROOT:-}" ]; then
-        echo "[hooks] ERROR: run_hooks requires HOOK_ROOT" >&2
+    STRICT="${STRICT_HOOKS:-1}"
+
+    if [ -z "${HOOK_NAME:-}" ]; then
+        echo "[hooks] ERROR: run_hooks requires HOOK_NAME" >&2
         return 1
     fi
+
+    HOOK_ROOT="/etc/xfce-rdp/hooks/${HOOK_NAME}"
+
+    # source centralized runtime config path (provided in image)
+    . "$(dirname "$0")/runtime_config.sh"
+
+    # If the hook root directory doesn't exist, nothing to do
+    [ -d "$HOOK_ROOT" ] || return 0
 
     # iterate phases
     shopt -s nullglob 2>/dev/null || true
