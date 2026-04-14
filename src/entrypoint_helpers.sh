@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck source=src/runtime_config.sh
-. "$(dirname "$0")/runtime_config.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/runtime_config.sh"
 # Helper functions for entrypoint.sh
 # - create_user: create a user, set password, configure sudo
 # - validate_runtime_config / load_runtime_config: validate and load runtime configuration JSON

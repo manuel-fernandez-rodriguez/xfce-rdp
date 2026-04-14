@@ -22,7 +22,7 @@ run_hooks() {
     HOOK_ROOT="/etc/xfce-rdp/hooks/${HOOK_NAME}"
 
     # source centralized runtime config path (provided in image)
-    . "$(dirname "$0")/runtime_config.sh"
+    . "$(dirname "${BASH_SOURCE[0]}")/runtime_config.sh"
 
     # If the hook root directory doesn't exist, nothing to do
     [ -d "$HOOK_ROOT" ] || return 0

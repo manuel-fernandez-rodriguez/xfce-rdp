@@ -2,7 +2,7 @@
 # startwm helpers (session lifecycle helpers for startwm.sh)
 
 # shellcheck required scripts
-. "$(dirname "$0")/hooks.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/hooks.sh"
 
 prepare_xdg_runtime() {
   # Use a per-session runtime dir under /tmp so concurrent sessions (even
