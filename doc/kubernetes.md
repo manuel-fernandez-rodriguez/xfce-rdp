@@ -277,9 +277,11 @@ kubectl get svc xfce-rdp-lb --watch
 Notes
 - Replace `PROJECT_ID` in the `deployment.yaml` image reference with your GCP 
   project ID.
-- Create the Secret with `--from-file` as shown to avoid embedding plaintext in 
-  manifests. The Secret will mount a file at `/run/secrets/users_credentials` 
-  containing the JSON array used by the container's entrypoint.
+  - Create the Secret with `--from-file` as shown to avoid embedding plaintext in
+    manifests. The Secret will mount a file at `/run/secrets/runtime_config` containing
+    the runtime configuration JSON. The entrypoint validates and writes the
+    configuration to `/etc/xfce-rdp/runtime_config.json` inside the container. Hooks
+    and helper scripts are expected under `/etc/xfce-rdp/` and `/etc/xfce-rdp/hooks`.
 - Adjust `storageClassName` in the PVC if your GKE cluster uses a different 
   default storage class.
 - If you prefer not to expose a LoadBalancer, remove the `service.yaml` and use
