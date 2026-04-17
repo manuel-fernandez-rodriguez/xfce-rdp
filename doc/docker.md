@@ -67,3 +67,12 @@ Docker may create an anonymous volume; prefer a named volume or host bind for
 predictable lifecycle and easier backups. Use `docker volume ls` and
 `docker volume rm <volume_name>` to manage volumes.
 
+## Optional: Add support for RDP drive sharing.
+**Note:** _This is not recommended for production since it requires additional 
+permissions, so use with caution and only if you understand the security 
+implications._
+
+To enable RDP drive redirection, you need to run the container with additional
+privileges, adding `--cap-add SYS_ADMIN` and `--device /dev/fuse` to the 
+`docker run` command.
+

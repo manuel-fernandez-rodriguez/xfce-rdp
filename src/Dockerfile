@@ -37,6 +37,7 @@ RUN apt-get update && \
         pm-utils \
         xdg-utils \
         wmctrl \
+        fuse \
         # Theme / engine packages to provide a dark GTK theme and icons
         arc-theme \
         gtk2-engines-pixbuf \
@@ -46,6 +47,7 @@ RUN apt-get update && \
     && apt-get autoremove -y --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
+
 
 # Ensure a minimal system locale file exists so PAM modules that read
 # /etc/default/locale do not warn when it is missing in minimal containers.
