@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./run.sh [--image IMAGE] [--container NAME] [--host-port PORT] [--shm-size SIZE] [--home-bind HOST_PATH] [--force]
+# Usage: ./run.sh [--image IMAGE] [--container NAME] [--host-port PORT] [--shm-size SIZE] [--home-bind HOST_PATH] [--force] [--local-drives-support]
 # Defaults: image=local/xfce-rdp:latest, container=xfce-rdp, host_port=33890, shm_size=1g
 # If --home-bind is provided the host path will be mounted at /home. Otherwise a
 # deterministic named docker volume "${container}-home" will be created and mounted
 # at /home so user homes persist across container recreation.
 # --force will remove any existing container with the same name before starting.
+# --local-drives-support will add required docker permissions to allow xrdp drive redirection
+#    (adds: --device /dev/fuse --cap-add SYS_ADMIN)
 
 # Defaults
 image="local/xfce-rdp:latest"
@@ -17,6 +19,7 @@ home_bind=""
 home_volume=""
 home_volume_specified=0
 force=0
+local_drives_support=0
 
 show_help() {
   cat <<EOF
@@ -31,7 +34,11 @@ Options:
   --home-volume NAME    Name of the docker volume to mount at /home. If the
                         option is provided without a NAME it defaults to
                         "${container}-home". (optional)
-  --force               Remove any existing container with the same name before starting (optional)
+  --local-drives-support
+                        Add container permissions to enable RDP client drive
+                        redirection (adds /dev/fuse, SYS_ADMIN).
+  --force               Remove any existing container with the same name before 
+                        starting (optional)
   -h, --help            Show this help and exit
 EOF
 }
@@ -51,6 +58,8 @@ while [ "$#" -gt 0 ]; do
     --home-bind) home_bind="$2"; shift 2;;
     --home-volume=*) home_volume="${1#*=}"; shift;;
     --home-volume) home_volume="$2"; home_volume_specified=1; shift 2;;
+    --local-drives-support=*) local_drives_support="${1#*=}"; shift;;
+    --local-drives-support) local_drives_support=1; shift;;
     --force=*) force="${1#*=}"; shift;;
     --force) force=1; shift;;
     -h|--help) show_help; exit 0;;
@@ -88,6 +97,12 @@ if [ "${home_volume_specified}" -eq 1 ]; then
   fi
   docker volume create "${home_volume}" >/dev/null || true
   docker_args+=( -v "${home_volume}:/home" )
+fi
+
+# If local drives support was requested, add required device/capabilities
+if [ "${local_drives_support}" -ne 0 ]; then
+  docker_args+=( --device /dev/fuse )
+  docker_args+=( --cap-add SYS_ADMIN )
 fi
 
 # If a container with the same name exists, either fail or remove it when --force is used.
