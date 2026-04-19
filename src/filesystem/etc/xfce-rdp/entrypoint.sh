@@ -6,7 +6,6 @@ set -e
 # via /run/secrets/runtime_config or the
 # RUNTIME_CONFIG environment variable (JSON object).
 
-
 # shellcheck required scripts
 . "$(dirname "$0")/entrypoint_helpers.sh"
 . "$(dirname "$0")/hooks.sh"
@@ -19,9 +18,7 @@ runtime_config_path="$(load_runtime_config)" || exit 1
 create_users "$runtime_config_path"
 
 # Run hooks (if any) before starting services or executing user command.
-if command -v run_hooks >/dev/null 2>&1; then
-    run_hooks "container-start" "pre main post"
-fi
+run_hooks "container-start" "pre main post"
 
 # If no args provided, run the default xrdp startup command
 if [ $# -eq 0 ]; then

@@ -56,6 +56,25 @@ kubectl run xfce-rdp `
   --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"xfce-rdp","volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}]}}'
 ```
 
+The same previous command, but adding support for RDP drive sharing (requires additional permissions, so use with caution):
+```bash
+kubectl run xfce-rdp \
+  --image=ghcr.io/manuel-fernandez-rodriguez/xfce-rdp:latest \
+  --restart=Never --port=3389 --image-pull-policy=IfNotPresent \
+  --env='RUNTIME_CONFIG={"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}]}' \
+  --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"xfce-rdp","securityContext":{"capabilities":{"add":["SYS_ADMIN"]}},"volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"},{"name":"dev-fuse","mountPath":"/dev/fuse"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}},{"name":"dev-fuse","hostPath":{"path":"/dev/fuse","type":"CharDevice"}}]}}'
+```
+PowerShell (use single quotes around the JSON payload):
+
+```powershell
+kubectl run xfce-rdp `
+  --image=ghcr.io/manuel-fernandez-rodriguez/xfce-rdp:latest `
+  --restart=Never --port=3389 --image-pull-policy=IfNotPresent `
+  --env='RUNTIME_CONFIG={"userCredentials":[{"username":"developer","password":"s3cr3t","sudo":true}]}' `
+  --overrides='{"apiVersion":"v1","spec":{"containers":[{"name":"xfce-rdp","securityContext":{"capabilities":{"add":["SYS_ADMIN"]}},"volumeMounts":[{"name":"dshm","mountPath":"/dev/shm"},{"name":"dev-fuse","mountPath":"/dev/fuse"}]}],"volumes":[{"name":"dshm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}},{"name":"dev-fuse","hostPath":{"path":"/dev/fuse","type":"CharDevice"}}]}}'
+```
+
+
 Note: `--overrides` is handy for quick testing, but using a Pod manifest (as 
 shown in the next section) is clearer and more reproducible. Also, `sizeLimit`
 may be ignored on older Kubernetes versions — test on your cluster.

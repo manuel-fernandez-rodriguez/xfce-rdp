@@ -118,6 +118,7 @@ install_cleanup_trap() {
 }
 
 
+
 determine_singleapp_user() {
   # Determine current username early so hooks can be informed regardless of
   # whether the runtime config file or `jq` are available.

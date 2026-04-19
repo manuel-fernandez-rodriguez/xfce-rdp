@@ -39,12 +39,10 @@ else
   exit 1
 fi
 
-# Run hooks under /etc/xfce-rdp/hooks/startwm with phase 'main'.
+# Run hooks under /etc/xfce-rdp/hooks/startwm with phase 'pre'.
 # Call run_hooks directly (hooks.sh provides it) and pass runtime config and
 # current user as extra arg.
-if command -v run_hooks >/dev/null 2>&1; then
-  run_hooks "user-login" "main" "${CUR_USER:-}"
-fi
+run_hooks "user-login" "pre" "${CUR_USER:-}"
 
 # If user wants a single-app session, run it instead of starting XFCE.
 # Only honor a per-user ~/.xsession when the runtime config explicitly
@@ -52,3 +50,5 @@ fi
 maybe_start_singleapp
 
 start_desktop
+
+run_hooks "user-login" "main post" "${CUR_USER:-}"
