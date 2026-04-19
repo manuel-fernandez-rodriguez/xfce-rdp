@@ -57,8 +57,8 @@ recommended options:
 ```bash
 # The helper will create and mount a deterministic named volume called
 # "${container}-home" (e.g. "xfce-rdp-home") if no --home-bind is provided.
-docker volume create devbox-home
-docker run -v devbox-home:/home -v "$(pwd)/runtime_config.json:/run/secrets/runtime_config:ro" \
+docker volume create xfce-rdp-home
+docker run -v xfce-rdp-home:/home -v "$(pwd)/runtime_config.json:/run/secrets/runtime_config:ro" \
   -p 33890:3389 --shm-size=1g -d --name xfce-rdp xfce-rdp:latest
 ```
 
